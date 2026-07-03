@@ -50,7 +50,18 @@ class CineRepository(
 
     suspend fun loadHome(): HomeFeed {
         service?.let {
-            return loadTmdbHome()
+            val tmdbFeed = loadTmdbHome()
+            if (tmdbFeed.hasContent) return tmdbFeed
+
+            // TMDb недоступен (блокировка, сеть) — пробуем PoiskKino как запасной источник.
+            poiskKinoService?.let { api ->
+                runCatching { loadPoiskKinoHome(api) }
+                    .onFailure { error -> Log.w("CineRepository", "PoiskKino fallback failed", error) }
+                    .getOrNull()
+                    ?.takeIf { it.hasContent }
+                    ?.let { return it }
+            }
+            return tmdbFeed
         }
 
         poiskKinoService?.let { api ->
