@@ -394,7 +394,7 @@ private fun HomeScreen(
                 .height(400.dp)
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(CineColors.Gold.copy(alpha = 0.15f), Color.Transparent),
+                        colors = listOf(CineColors.Gold.copy(alpha = 0.08f), Color.Transparent),
                         center = Offset(200f, -100f),
                         radius = 800f
                     )
@@ -1198,7 +1198,7 @@ private fun ThemeChoiceButton(
             }
             Text(
                 text = theme.title,
-                color = if (selected) Color(0xFF15100A) else CineColors.PrimaryText,
+                color = if (selected) CineColors.OnGold else CineColors.PrimaryText,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
@@ -1262,7 +1262,7 @@ private fun LibraryFilterChip(text: String, selected: Boolean, onClick: () -> Un
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            color = if (selected) Color(0xFF15100A) else CineColors.SoftText,
+            color = if (selected) CineColors.OnGold else CineColors.SoftText,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -1352,7 +1352,7 @@ private fun CollectionsBlock(
                 Icon(
                     painter = painterResource(R.drawable.ic_plus),
                     contentDescription = null,
-                    tint = if (newCollectionName.isNotBlank()) Color(0xFF15100A) else CineColors.MutedText
+                    tint = if (newCollectionName.isNotBlank()) CineColors.OnGold else CineColors.MutedText
                 )
             }
         }
@@ -1928,7 +1928,7 @@ private fun RouletteDialog(
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = CineColors.Gold)
                 ) {
-                    Text("Открыть", color = Color(0xFF15100A), fontWeight = FontWeight.Bold)
+                    Text("Открыть", color = CineColors.OnGold, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -2418,7 +2418,7 @@ private fun CollectionPickerSheet(
                     Icon(
                         painter = painterResource(R.drawable.ic_plus),
                         contentDescription = "Создать",
-                        tint = if (newCollectionName.isNotBlank()) Color(0xFF15100A) else CineColors.MutedText
+                        tint = if (newCollectionName.isNotBlank()) CineColors.OnGold else CineColors.MutedText
                     )
                 }
             }
@@ -2583,7 +2583,7 @@ private fun TrackerStatusButton(
             modifier = modifier.height(48.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = CineColors.Gold,
-                contentColor = Color(0xFF15100A)
+                contentColor = CineColors.OnGold
             ),
             shape = RoundedCornerShape(16.dp),
             contentPadding = PaddingValues(horizontal = 8.dp)
@@ -2931,26 +2931,48 @@ private fun PosterCard(item: MediaItem, personalRating: Int? = null, onClick: ()
             .clickable(onClick = onClick),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .border(1.dp, CineColors.Stroke, RoundedCornerShape(18.dp))
+        ) {
             PosterArt(
                 item = item,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                modifier = Modifier.fillMaxSize()
             )
-            Box(modifier = Modifier.padding(6.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0.55f to Color.Transparent,
+                            1f to CineColors.Background.copy(alpha = 0.55f)
+                        )
+                    )
+            )
+            Box(modifier = Modifier.padding(8.dp)) {
                 RatingBadge(score = item.rating, personal = personalRating, source = item.ratings.primarySource)
             }
         }
-        Text(
-            text = item.title,
-            color = CineColors.PrimaryText,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = item.title,
+                color = CineColors.PrimaryText,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = listOf(item.year, item.kind.label).filter { it.isNotBlank() }.joinToString(" · "),
+                color = CineColors.MutedText,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -3220,7 +3242,7 @@ private fun FilterPill(text: String, selected: Boolean, onClick: () -> Unit) {
         Text(
             text = text,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            color = if (selected) Color(0xFF15100A) else CineColors.SoftText,
+            color = if (selected) CineColors.OnGold else CineColors.SoftText,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold
         )
@@ -3470,7 +3492,7 @@ private fun CineNavigationBar(
                         )
                     },
                     colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = Color(0xFF15100A),
+                        selectedIconColor = CineColors.OnGold,
                         selectedTextColor = CineColors.Gold,
                         indicatorColor = CineColors.Gold,
                         unselectedIconColor = CineColors.MutedText,
@@ -3722,47 +3744,51 @@ private data class CinePalette(
     val mutedText: Color,
     val gold: Color,
     val mint: Color,
-    val coral: Color
+    val coral: Color,
+    val onGold: Color
 )
 
 private val LocalCinePalette = staticCompositionLocalOf { paletteFor(CineAppTheme.Cinema) }
 
 private fun paletteFor(theme: CineAppTheme): CinePalette = when (theme) {
     CineAppTheme.Cinema -> CinePalette(
-        background = Color(0xFF090A0E),
-        card = Color(0xFF141821),
-        nav = Color(0xFF10131A),
-        stroke = Color(0xFF252B35),
-        primaryText = Color(0xFFF6F0E8),
-        softText = Color(0xFFE7DACB),
-        mutedText = Color(0xFF9EA6B3),
-        gold = Color(0xFFF2C76E),
-        mint = Color(0xFF70D8B2),
-        coral = Color(0xFFFF8E6E)
+        background = Color(0xFF07080C),
+        card = Color(0xFF12151D),
+        nav = Color(0xFF0C0F15),
+        stroke = Color(0x1FFFFFFF),
+        primaryText = Color(0xFFF7F2EA),
+        softText = Color(0xFFD9CDBB),
+        mutedText = Color(0xFF8B93A1),
+        gold = Color(0xFFF5C86A),
+        mint = Color(0xFF6FE0B4),
+        coral = Color(0xFFFF8A6B),
+        onGold = Color(0xFF15100A)
     )
     CineAppTheme.Light -> CinePalette(
-        background = Color(0xFFF6F1E8),
+        background = Color(0xFFFAF6EF),
         card = Color(0xFFFFFFFF),
-        nav = Color(0xFFF3E7D9),
-        stroke = Color(0xFFDDD2C3),
-        primaryText = Color(0xFF15110D),
-        softText = Color(0xFF3A3129),
-        mutedText = Color(0xFF7A7168),
-        gold = Color(0xFFB98124),
-        mint = Color(0xFF1B7D63),
-        coral = Color(0xFFC95D45)
+        nav = Color(0xFFF4EDE2),
+        stroke = Color(0x1F000000),
+        primaryText = Color(0xFF171310),
+        softText = Color(0xFF44392E),
+        mutedText = Color(0xFF83786C),
+        gold = Color(0xFFA96F12),
+        mint = Color(0xFF13715A),
+        coral = Color(0xFFBF4E38),
+        onGold = Color(0xFFFFFBF2)
     )
     CineAppTheme.Emerald -> CinePalette(
-        background = Color(0xFF07100D),
-        card = Color(0xFF121B17),
-        nav = Color(0xFF0D1512),
-        stroke = Color(0xFF26362F),
-        primaryText = Color(0xFFF4F7EF),
-        softText = Color(0xFFD8E4D4),
-        mutedText = Color(0xFF96A59D),
-        gold = Color(0xFFD7B85D),
+        background = Color(0xFF050D0A),
+        card = Color(0xFF101915),
+        nav = Color(0xFF0A120E),
+        stroke = Color(0x1F5BE0A5),
+        primaryText = Color(0xFFF3F8F0),
+        softText = Color(0xFFCBDCC9),
+        mutedText = Color(0xFF88998F),
+        gold = Color(0xFFDCC069),
         mint = Color(0xFF5BE0A5),
-        coral = Color(0xFFFF8F75)
+        coral = Color(0xFFFF8F75),
+        onGold = Color(0xFF10130B)
     )
 }
 
@@ -3787,6 +3813,8 @@ private object CineColors {
         @Composable get() = LocalCinePalette.current.mint
     val Coral: Color
         @Composable get() = LocalCinePalette.current.coral
+    val OnGold: Color
+        @Composable get() = LocalCinePalette.current.onGold
 }
 
 @Preview(showBackground = true, backgroundColor = 0xFF090A0E)

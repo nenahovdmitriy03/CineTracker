@@ -44,8 +44,9 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun CineTrackerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    // Dynamic color is intentionally disabled: it overrides the curated
+    // CineTracker palettes with wallpaper-derived colors on Android 12+.
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
