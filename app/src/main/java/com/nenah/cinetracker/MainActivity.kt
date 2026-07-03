@@ -68,7 +68,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,7 +83,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -92,7 +90,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.palette.graphics.Palette
@@ -134,22 +131,10 @@ import com.nenah.cinetracker.model.TrackerStats
 import com.nenah.cinetracker.ui.CineUiState
 import com.nenah.cinetracker.ui.CineViewModel
 import com.nenah.cinetracker.ui.theme.CineTrackerTheme
-import com.yandex.mobile.ads.banner.BannerAdEventListener
-import com.yandex.mobile.ads.banner.BannerAdSize
-import com.yandex.mobile.ads.banner.BannerAdView
-import com.yandex.mobile.ads.common.AdRequest
-import com.yandex.mobile.ads.common.AdRequestError
-import com.yandex.mobile.ads.common.ImpressionData
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.materials.HazeMaterials
-import dev.chrisbanes.haze.rememberHazeState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -190,7 +175,6 @@ private fun CineTrackerApp(viewModel: CineViewModel = viewModel()) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route.orEmpty()
     val showBottomBar = currentRoute in CineTab.entries.map { it.route }
-    val hazeState = rememberHazeState()
 
     CompositionLocalProvider(
         LocalImageLoader provides imageLoader,
@@ -203,7 +187,6 @@ private fun CineTrackerApp(viewModel: CineViewModel = viewModel()) {
                 if (showBottomBar) {
                     CineNavigationBar(
                         currentRoute = currentRoute.ifBlank { CineTab.Home.route },
-                        hazeState = hazeState,
                         onTabSelected = { tab ->
                             navController.navigate(tab.route) {
                                 popUpTo(CineTab.Home.route) { saveState = true }
@@ -227,6 +210,7 @@ private fun CineTrackerApp(viewModel: CineViewModel = viewModel()) {
                 onManualLinkChanged = viewModel::updateManualLink,
                 onAddManualLink = viewModel::addManualLinkToPlan,
                 onOpenDetail = viewModel::openDetail,
+                onRefreshHome = viewModel::refreshHome,
                 onSetStatus = viewModel::setSelectedStatus,
                 onSetRating = viewModel::setSelectedRating,
                 onSetEpisodeRating = viewModel::setEpisodeRating,
@@ -240,9 +224,7 @@ private fun CineTrackerApp(viewModel: CineViewModel = viewModel()) {
                 onCreateCollectionForSelected = viewModel::createCollectionForSelected,
                 onToggleSelectedCollection = viewModel::toggleSelectedCollection,
                 onLoadCollectionItems = viewModel::loadCollectionItems,
-                modifier = Modifier
-                    .hazeSource(state = hazeState)
-                    .padding(innerPadding)
+                modifier = Modifier.padding(innerPadding)
             )
         }
     }
@@ -258,6 +240,7 @@ private fun CineNavHost(
     onManualLinkChanged: (String) -> Unit,
     onAddManualLink: () -> Unit,
     onOpenDetail: (MediaKind, Int) -> Unit,
+    onRefreshHome: () -> Unit,
     onSetStatus: (TrackStatus) -> Unit,
     onSetRating: (Int) -> Unit,
     onSetEpisodeRating: (Int, Int, Int, Int?) -> Unit,
@@ -282,7 +265,8 @@ private fun CineNavHost(
             HomeScreen(
                 uiState = uiState,
                 onOpenItem = onOpenItem,
-                onOpenSection = { section -> navController.navigate("section/${section.key}") }
+                onOpenSection = { section -> navController.navigate("section/${section.key}") },
+                onRefresh = onRefreshHome
             )
         }
         composable(
@@ -338,7 +322,9 @@ private fun CineNavHost(
             ProfileScreen(
                 isTmdbConfigured = uiState.isTmdbConfigured,
                 stats = uiState.trackerStats,
-                recentEvents = uiState.recentEvents
+                recentEvents = uiState.recentEvents,
+                selectedTheme = uiState.appTheme,
+                onThemeSelected = onThemeSelected
             )
         }
         composable(
@@ -380,7 +366,8 @@ private fun CineNavHost(
 private fun HomeScreen(
     uiState: CineUiState,
     onOpenItem: (MediaItem) -> Unit,
-    onOpenSection: (HomeSection) -> Unit
+    onOpenSection: (HomeSection) -> Unit,
+    onRefresh: () -> Unit
 ) {
     val feed = uiState.homeFeed
     var selectedFilter by rememberSaveable { mutableStateOf(HomeFilter.All) }
@@ -424,10 +411,23 @@ private fun HomeScreen(
             }
             if (!feed.hasContent) {
                 item {
-                    EmptyLibraryCard(
-                        title = "Каталог не загрузился",
-                        subtitle = "Проверь сеть или прокси TMDb и обнови главную страницу позже."
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        EmptyLibraryCard(
+                            title = "Каталог не загрузился",
+                            subtitle = "Проверь сеть или VPN и попробуй ещё раз."
+                        )
+                        Button(
+                            onClick = onRefresh,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = CineColors.Gold,
+                                contentColor = CineColors.OnGold
+                            )
+                        ) {
+                            Text("Обновить", fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             } else {
                 if (hero != null) {
@@ -732,9 +732,11 @@ private fun LibraryScreen(
     var selectedStatus by remember { mutableStateOf<TrackStatus?>(null) }
     var newCollectionName by remember { mutableStateOf("") }
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp
-    val visibleTitles = trackedTitles
-        .filter { selectedStatus == null || it.status == selectedStatus }
-        .sortedByDescending { it.updatedAt }
+    val visibleTitles = remember(trackedTitles, selectedStatus) {
+        trackedTitles
+            .filter { selectedStatus == null || it.status == selectedStatus }
+            .sortedByDescending { it.updatedAt }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -781,7 +783,7 @@ private fun LibraryScreen(
                 )
             }
         }
-        items(visibleTitles) { trackedTitle ->
+        items(visibleTitles, key = { it.item.mediaKey() }) { trackedTitle ->
             LibraryTitleCard(
                 trackedTitle = trackedTitle,
                 onClick = { onOpenItem(trackedTitle.item) }
@@ -794,7 +796,9 @@ private fun LibraryScreen(
 private fun ProfileScreen(
     isTmdbConfigured: Boolean,
     stats: TrackerStats,
-    recentEvents: List<TrackerEvent>
+    recentEvents: List<TrackerEvent>,
+    selectedTheme: CineAppTheme,
+    onThemeSelected: (CineAppTheme) -> Unit
 ) {
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 24.dp
     LazyColumn(
@@ -819,7 +823,10 @@ private fun ProfileScreen(
             )
         }
         item {
-            YandexBannerCard()
+            ThemeSettingsCard(
+                selectedTheme = selectedTheme,
+                onThemeSelected = onThemeSelected
+            )
         }
         item {
             EventTimelineCard(events = recentEvents)
@@ -837,138 +844,151 @@ private fun ProfileSummaryCard(isTmdbConfigured: Boolean, stats: TrackerStats) {
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
+                        .size(60.dp)
                         .clip(CircleShape)
-                        .background(CineColors.Gold.copy(alpha = 0.12f)),
+                        .background(CineColors.Gold.copy(alpha = 0.14f))
+                        .border(1.dp, CineColors.Gold.copy(alpha = 0.35f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_user),
                         contentDescription = null,
                         tint = CineColors.Gold,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = "Мой профиль",
                         color = CineColors.PrimaryText,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold
                     )
-                    Text(
-                        text = if (isTmdbConfigured) "Каталог подключен" else "Каталог не подключен",
-                        color = CineColors.MutedText,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (isTmdbConfigured) CineColors.Mint else CineColors.Coral)
+                        )
+                        Text(
+                            text = if (isTmdbConfigured) "Каталог подключен" else "Каталог не подключен",
+                            color = CineColors.MutedText,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
                 }
             }
-            
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CompactStat(label = "Всего", value = stats.total.toString(), color = CineColors.Gold)
-                    CompactStat(label = "Смотрю", value = stats.watching.toString(), color = CineColors.Mint)
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CompactStat(label = "Готово", value = stats.watched.toString(), color = CineColors.Coral)
-                    CompactStat(label = "Время", value = stats.watchedMinutes.formatWatchTime(), color = CineColors.Mint)
-                }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ProfileStatTile(
+                    label = "Всего тайтлов",
+                    value = stats.total.toString(),
+                    color = CineColors.Gold,
+                    modifier = Modifier.weight(1f)
+                )
+                ProfileStatTile(
+                    label = "Смотрю",
+                    value = stats.watching.toString(),
+                    color = CineColors.Mint,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ProfileStatTile(
+                    label = "Просмотрено",
+                    value = stats.watched.toString(),
+                    color = CineColors.Coral,
+                    modifier = Modifier.weight(1f)
+                )
+                ProfileStatTile(
+                    label = "Время у экрана",
+                    value = stats.watchedMinutes.formatWatchTime(),
+                    color = CineColors.Mint,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ProfileMiniChip(label = "Оценок", value = stats.ratedTitles.toString())
+                ProfileMiniChip(label = "Эпизодов оценено", value = stats.ratedEpisodes.toString())
+                ProfileMiniChip(label = "Коллекций", value = stats.collections.toString())
             }
         }
     }
 }
 
 @Composable
-private fun YandexBannerCard() {
+private fun ProfileStatTile(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = CineColors.Card,
-        border = BorderStroke(1.dp, CineColors.Stroke)
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = color.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.22f))
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
-                text = "Реклама",
-                color = CineColors.MutedText,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold
+                text = value,
+                color = color,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            YandexInlineBannerAd(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(CineColors.Background.copy(alpha = 0.62f))
+            Text(
+                text = label,
+                color = CineColors.MutedText,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
 }
 
 @Composable
-private fun YandexInlineBannerAd(
-    modifier: Modifier = Modifier,
-    adUnitId: String = BuildConfig.YANDEX_BANNER_AD_UNIT_ID,
-    maxHeightDp: Int = 120
-) {
-    val context = LocalContext.current
-    val density = LocalDensity.current
-    var widthDp by remember(adUnitId) { mutableStateOf(0) }
-
-    Box(
-        modifier = modifier.onGloballyPositioned { coordinates ->
-            val measuredWidth = with(density) { coordinates.size.width.toDp().value.roundToInt() }
-            if (measuredWidth > 0 && measuredWidth != widthDp) {
-                widthDp = measuredWidth
-            }
-        },
-        contentAlignment = Alignment.Center
+private fun ProfileMiniChip(label: String, value: String) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = CineColors.Background.copy(alpha = 0.5f),
+        border = BorderStroke(1.dp, CineColors.Stroke)
     ) {
-        if (widthDp <= 0) {
-            LoadingInline()
-            return@Box
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text(
+                text = value,
+                color = CineColors.PrimaryText,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = label,
+                color = CineColors.MutedText,
+                style = MaterialTheme.typography.labelSmall
+            )
         }
-
-        val bannerView = remember(adUnitId, widthDp, maxHeightDp) {
-            BannerAdView(context).apply {
-                setAdSize(BannerAdSize.inline(context, widthDp, maxHeightDp))
-                setBannerAdEventListener(object : BannerAdEventListener {
-                    override fun onAdLoaded() {
-                        Log.d("CineAds", "Yandex banner loaded")
-                    }
-
-                    override fun onAdFailedToLoad(adRequestError: AdRequestError) {
-                        Log.w("CineAds", "Yandex banner failed: $adRequestError")
-                    }
-
-                    override fun onAdClicked() = Unit
-
-                    override fun onImpression(impressionData: ImpressionData?) = Unit
-                })
-                loadAd(AdRequest.Builder(adUnitId).build())
-            }
-        }
-
-        DisposableEffect(bannerView) {
-            onDispose {
-                bannerView.destroy()
-            }
-        }
-
-        AndroidView(
-            factory = { bannerView },
-            modifier = Modifier.fillMaxSize()
-        )
     }
 }
 
@@ -1613,12 +1633,10 @@ private fun DetailScreen(
         return
     }
 
-    val hazeState = rememberHazeState()
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(CineColors.Background)
-            .hazeSource(state = hazeState),
+            .background(CineColors.Background),
         contentPadding = PaddingValues(bottom = 28.dp)
     ) {
         item {
@@ -1708,8 +1726,7 @@ private fun DetailScreen(
                 modifier = Modifier
                     .padding(horizontal = 20.dp, vertical = 22.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .hazeEffect(state = hazeState, style = HazeMaterials.ultraThin())
-                    .background(CineColors.Card.copy(alpha = 0.4f))
+                    .background(CineColors.Card.copy(alpha = 0.92f))
                     .border(1.dp, CineColors.Stroke.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
@@ -2911,12 +2928,14 @@ private fun MediaRail(
     onActionClick: (() -> Unit)? = null,
     onOpenItem: (MediaItem) -> Unit
 ) {
+    val personalRatings = remember(trackedTitles) {
+        trackedTitles.associate { it.item.mediaKey() to it.personalRating }
+    }
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         SectionHeader(title = title, action = action, onActionClick = onActionClick)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             items(items, key = { it.mediaKey() }) { item ->
-                val personalRating = trackedTitles.find { it.item.id == item.id && it.item.kind == item.kind }?.personalRating
-                PosterCard(item = item, personalRating = personalRating, onClick = { onOpenItem(item) })
+                PosterCard(item = item, personalRating = personalRatings[item.mediaKey()], onClick = { onOpenItem(item) })
             }
         }
     }
@@ -3457,14 +3476,11 @@ private fun statusColor(status: TrackStatus): Color = when (status) {
 @Composable
 private fun CineNavigationBar(
     currentRoute: String,
-    hazeState: HazeState,
     onTabSelected: (CineTab) -> Unit
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .hazeEffect(state = hazeState, style = HazeMaterials.ultraThin()),
-        color = CineColors.Nav.copy(alpha = 0.72f),
+        modifier = Modifier.fillMaxWidth(),
+        color = CineColors.Nav.copy(alpha = 0.97f),
         tonalElevation = 0.dp
     ) {
         NavigationBar(

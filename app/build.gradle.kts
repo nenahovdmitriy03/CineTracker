@@ -36,13 +36,11 @@ android {
         val tmdbImageBaseUrl = localProperties.getProperty("tmdb.image.baseUrl", "https://image.tmdb.org/t/p/")
         val poiskKinoApiKey = localProperties.getProperty("poiskkino.api.key", "")
         val poiskKinoApiBaseUrl = localProperties.getProperty("poiskkino.api.baseUrl", "https://api.poiskkino.dev/")
-        val yandexBannerAdUnitId = localProperties.getProperty("yandex.banner.adUnitId", "demo-banner-yandex")
         buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"${tmdbToken.escapeBuildConfigString()}\"")
         buildConfigField("String", "TMDB_API_BASE_URL", "\"${tmdbApiBaseUrl.escapeBuildConfigString()}\"")
         buildConfigField("String", "TMDB_IMAGE_BASE_URL", "\"${tmdbImageBaseUrl.escapeBuildConfigString()}\"")
         buildConfigField("String", "POISKKINO_API_KEY", "\"${poiskKinoApiKey.escapeBuildConfigString()}\"")
         buildConfigField("String", "POISKKINO_API_BASE_URL", "\"${poiskKinoApiBaseUrl.escapeBuildConfigString()}\"")
-        buildConfigField("String", "YANDEX_BANNER_AD_UNIT_ID", "\"${yandexBannerAdUnitId.escapeBuildConfigString()}\"")
     }
 
     buildTypes {
@@ -83,12 +81,9 @@ dependencies {
     implementation(libs.okhttp.dnsoverhttps)
     implementation(libs.coil.compose)
     implementation(libs.lottie.compose)
-    implementation(libs.haze)
-    implementation(libs.haze.materials)
     implementation(libs.androidx.palette)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-    implementation(libs.yandex.mobile.ads)
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
