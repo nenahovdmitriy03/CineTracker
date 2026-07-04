@@ -69,6 +69,21 @@ class CineTrackerProxy(BaseHTTPRequestHandler):
             )
             return
 
+        if is_tmdb_api_path(parsed.path):
+            if not TMDB_TOKEN:
+                self.send_json(500, {"error": "TMDB_READ_ACCESS_TOKEN is not configured"})
+                return
+            upstream = TMDB_API_ROOT + parsed.path
+            if parsed.query:
+                upstream += "?" + parsed.query
+            self.forward(
+                upstream,
+                accept="application/json",
+                headers={"Authorization": "Bearer " + TMDB_TOKEN},
+                cache_ttl=6 * 60 * 60,
+            )
+            return
+
         if parsed.path.startswith("/image/t/p/"):
             if not TMDB_TOKEN:
                 self.send_json(500, {"error": "TMDB_READ_ACCESS_TOKEN is not configured"})
@@ -167,6 +182,19 @@ def poiskkino_cache_ttl(path):
     if path.endswith("/movie"):
         return 12 * 60 * 60
     return 60 * 60
+
+
+def is_tmdb_api_path(path):
+    return path.startswith(
+        (
+            "/trending/",
+            "/movie/",
+            "/tv/",
+            "/discover/",
+            "/search/",
+            "/collection/",
+        )
+    )
 
 
 def cache_path(url):

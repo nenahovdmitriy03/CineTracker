@@ -1469,7 +1469,8 @@ private fun LibraryTitleCard(trackedTitle: TrackedTitle, onClick: () -> Unit) {
                     .width(64.dp)
                     .fillMaxHeight(),
                 imageWidthPx = 128,
-                imageHeightPx = 192
+                imageHeightPx = 192,
+                loadImage = false
             )
             Spacer(Modifier.width(12.dp))
             Column(
@@ -3130,13 +3131,14 @@ private fun PosterArt(
     modifier: Modifier = Modifier,
     dynamicAccent: Boolean = false,
     imageWidthPx: Int = 360,
-    imageHeightPx: Int = 540
+    imageHeightPx: Int = 540,
+    loadImage: Boolean = true
 ) {
     val context = LocalContext.current
     var imageFailed by remember(item.posterUrl) { mutableStateOf(false) }
-    val accent = rememberImageAccent(item.posterUrl, item.id, enabled = dynamicAccent)
-    val posterModel = remember(context, item.posterUrl, imageWidthPx, imageHeightPx) {
-        item.posterUrl?.let { posterUrl ->
+    val accent = rememberImageAccent(item.posterUrl, item.id, enabled = dynamicAccent && loadImage)
+    val posterModel = remember(context, item.posterUrl, imageWidthPx, imageHeightPx, loadImage) {
+        item.posterUrl?.takeIf { loadImage }?.let { posterUrl ->
             ImageRequest.Builder(context)
                 .data(posterUrl)
                 .size(imageWidthPx, imageHeightPx)
@@ -3176,7 +3178,7 @@ private fun PosterArt(
                 )
         )
 
-        if (item.posterUrl == null || imageFailed) {
+        if (!loadImage || item.posterUrl == null || imageFailed) {
             Text(
                 text = item.title.shortPosterTitle(),
                 modifier = Modifier

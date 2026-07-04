@@ -108,7 +108,7 @@ interface TmdbService {
 
 object TmdbNetwork {
     fun create(readAccessToken: String, baseUrl: String): TmdbService {
-        val normalizedBaseUrl = baseUrl.ensureTrailingSlash()
+        val normalizedBaseUrl = baseUrl.normalizedTmdbApiBaseUrl(TMDB_API_HOST)
         val useSystemDns = !normalizedBaseUrl.isOfficialTmdbHost(TMDB_API_HOST)
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
@@ -248,6 +248,21 @@ object TmdbNetwork {
 }
 
 private fun String.ensureTrailingSlash(): String = if (endsWith("/")) this else "$this/"
+
+private fun String.normalizedTmdbApiBaseUrl(officialHost: String): String {
+    val base = ensureTrailingSlash()
+    if (base.isOfficialTmdbHost(officialHost)) return base
+
+    val url = runCatching { base.toHttpUrl() }.getOrNull() ?: return base
+    val pathSegments = url.pathSegments.filter { it.isNotBlank() }
+    if (pathSegments.lastOrNull() == "3") return base
+
+    return url.newBuilder()
+        .addPathSegment("3")
+        .build()
+        .toString()
+        .ensureTrailingSlash()
+}
 
 private fun String.isOfficialTmdbHost(host: String): Boolean {
     return runCatching { ensureTrailingSlash().toHttpUrl().host == host }.getOrDefault(false)
