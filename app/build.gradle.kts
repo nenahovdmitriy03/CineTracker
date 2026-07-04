@@ -15,6 +15,17 @@ val localProperties = Properties().apply {
 
 fun String.escapeBuildConfigString(): String = replace("\\", "\\\\").replace("\"", "\\\"")
 
+fun configValue(propertyName: String, environmentName: String, defaultValue: String = ""): String {
+    return localProperties.getProperty(propertyName)
+        ?: providers.environmentVariable(environmentName).orNull
+        ?: defaultValue
+}
+
+fun tmdbProxyImageBase(apiBaseUrl: String): String {
+    val root = apiBaseUrl.trimEnd('/').removeSuffix("/3")
+    return "$root/image/t/p/"
+}
+
 android {
     namespace = "com.nenah.cinetracker"
     compileSdk {
@@ -31,11 +42,21 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        val tmdbToken = localProperties.getProperty("tmdb.api.token", "")
-        val tmdbApiBaseUrl = localProperties.getProperty("tmdb.api.baseUrl", "https://api.themoviedb.org/3/")
-        val tmdbImageBaseUrl = localProperties.getProperty("tmdb.image.baseUrl", "https://image.tmdb.org/t/p/")
-        val poiskKinoApiKey = localProperties.getProperty("poiskkino.api.key", "")
-        val poiskKinoApiBaseUrl = localProperties.getProperty("poiskkino.api.baseUrl", "https://api.poiskkino.dev/")
+        val tmdbToken = configValue("tmdb.api.token", "TMDB_READ_ACCESS_TOKEN")
+        val defaultTmdbApiBaseUrl = if (tmdbToken.isBlank()) {
+            "http://10.0.2.2:8080/3/"
+        } else {
+            "https://api.themoviedb.org/3/"
+        }
+        val tmdbApiBaseUrl = configValue("tmdb.api.baseUrl", "TMDB_API_BASE_URL", defaultTmdbApiBaseUrl)
+        val defaultTmdbImageBaseUrl = if (tmdbApiBaseUrl.startsWith("https://api.themoviedb.org")) {
+            "https://image.tmdb.org/t/p/"
+        } else {
+            tmdbProxyImageBase(tmdbApiBaseUrl)
+        }
+        val tmdbImageBaseUrl = configValue("tmdb.image.baseUrl", "TMDB_IMAGE_BASE_URL", defaultTmdbImageBaseUrl)
+        val poiskKinoApiKey = configValue("poiskkino.api.key", "POISKKINO_API_KEY")
+        val poiskKinoApiBaseUrl = configValue("poiskkino.api.baseUrl", "POISKKINO_API_BASE_URL", "https://api.poiskkino.dev/")
         buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"${tmdbToken.escapeBuildConfigString()}\"")
         buildConfigField("String", "TMDB_API_BASE_URL", "\"${tmdbApiBaseUrl.escapeBuildConfigString()}\"")
         buildConfigField("String", "TMDB_IMAGE_BASE_URL", "\"${tmdbImageBaseUrl.escapeBuildConfigString()}\"")

@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -74,6 +75,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -134,6 +136,8 @@ import com.nenah.cinetracker.ui.theme.CineTrackerTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlin.math.abs
 
 class MainActivity : ComponentActivity() {
@@ -731,14 +735,32 @@ private fun LibraryScreen(
 ) {
     var selectedStatus by remember { mutableStateOf<TrackStatus?>(null) }
     var newCollectionName by remember { mutableStateOf("") }
+    var visibleLimit by remember(trackedTitles, selectedStatus) { mutableStateOf(LibraryPageSize) }
+    val listState = rememberLazyListState()
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp
     val visibleTitles = remember(trackedTitles, selectedStatus) {
         trackedTitles
             .filter { selectedStatus == null || it.status == selectedStatus }
             .sortedByDescending { it.updatedAt }
     }
+    val pagedTitles = remember(visibleTitles, visibleLimit) {
+        visibleTitles.take(visibleLimit)
+    }
+
+    LaunchedEffect(listState, visibleTitles.size, visibleLimit) {
+        if (visibleLimit >= visibleTitles.size) return@LaunchedEffect
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
+            .map { lastVisibleIndex -> lastVisibleIndex >= visibleLimit - 8 }
+            .distinctUntilChanged()
+            .collect { shouldLoadMore ->
+                if (shouldLoadMore) {
+                    visibleLimit = (visibleLimit + LibraryPageSize).coerceAtMost(visibleTitles.size)
+                }
+            }
+    }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier
             .fillMaxSize()
             .background(CineColors.Background),
@@ -784,7 +806,7 @@ private fun LibraryScreen(
             }
         }
         items(
-            items = visibleTitles,
+            items = pagedTitles,
             key = { it.item.mediaKey() },
             contentType = { it.status.routeValue }
         ) { trackedTitle ->
@@ -1469,8 +1491,7 @@ private fun LibraryTitleCard(trackedTitle: TrackedTitle, onClick: () -> Unit) {
                     .width(64.dp)
                     .fillMaxHeight(),
                 imageWidthPx = 128,
-                imageHeightPx = 192,
-                loadImage = false
+                imageHeightPx = 192
             )
             Spacer(Modifier.width(12.dp))
             Column(
@@ -3758,6 +3779,8 @@ private fun MediaItem.matches(filter: HomeFilter, allowedKeys: Set<String>): Boo
 private fun MediaItem.mediaKey(): String = "${kind.routeValue}:$id"
 
 private fun List<MediaItem>.distinctForUi(): List<MediaItem> = distinctBy { it.mediaKey() }
+
+private const val LibraryPageSize = 60
 
 private enum class CineTab(
     val route: String,
