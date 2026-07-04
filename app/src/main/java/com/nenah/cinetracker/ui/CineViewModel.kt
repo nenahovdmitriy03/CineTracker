@@ -256,6 +256,9 @@ class CineViewModel(
     fun setSelectedRating(rating: Int) {
         val item = _uiState.value.selectedDetail?.item ?: return
         viewModelScope.launch {
+            if (_uiState.value.selectedTrackedTitle == null) {
+                trackingRepository.setStatus(item, TrackStatus.Planned)
+            }
             trackingRepository.setRating(item, rating)
         }
     }

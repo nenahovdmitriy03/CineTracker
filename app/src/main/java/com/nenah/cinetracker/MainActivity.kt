@@ -746,6 +746,10 @@ private fun LibraryScreen(
     val pagedTitles = remember(visibleTitles, visibleLimit) {
         visibleTitles.take(visibleLimit)
     }
+    val watchingCount = remember(trackedTitles) { trackedTitles.count { it.status == TrackStatus.Watching } }
+    val plannedCount = remember(trackedTitles) { trackedTitles.count { it.status == TrackStatus.Planned } }
+    val watchedCount = remember(trackedTitles) { trackedTitles.count { it.status == TrackStatus.Watched } }
+    val ratedCount = remember(trackedTitles) { trackedTitles.count { it.personalRating != null } }
 
     LaunchedEffect(listState, visibleTitles.size, visibleLimit) {
         if (visibleLimit >= visibleTitles.size) return@LaunchedEffect
@@ -768,11 +772,12 @@ private fun LibraryScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Text(
-                text = "Мой список",
-                color = CineColors.PrimaryText,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
+            LibraryHeaderCard(
+                total = trackedTitles.size,
+                watching = watchingCount,
+                planned = plannedCount,
+                watched = watchedCount,
+                rated = ratedCount
             )
         }
         item {
@@ -819,6 +824,104 @@ private fun LibraryScreen(
 }
 
 @Composable
+private fun LibraryHeaderCard(
+    total: Int,
+    watching: Int,
+    planned: Int,
+    watched: Int,
+    rated: Int
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = CineColors.Card,
+        border = BorderStroke(1.dp, CineColors.Stroke)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Моя библиотека",
+                        color = CineColors.PrimaryText,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        text = "$total тайтлов · $rated оценок",
+                        color = CineColors.MutedText,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(CineColors.Gold.copy(alpha = 0.14f))
+                        .border(1.dp, CineColors.Gold.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_bookmark),
+                        contentDescription = null,
+                        tint = CineColors.Gold,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LibraryMetricPill("Смотрю", watching.toString(), CineColors.Mint, Modifier.weight(1f))
+                LibraryMetricPill("В плане", planned.toString(), CineColors.Gold, Modifier.weight(1f))
+                LibraryMetricPill("Готово", watched.toString(), CineColors.Coral, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryMetricPill(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.height(70.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = color.copy(alpha = 0.1f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.25f))
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = value,
+                color = color,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = label,
+                color = CineColors.MutedText,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
 private fun ProfileScreen(
     isTmdbConfigured: Boolean,
     stats: TrackerStats,
@@ -826,27 +929,22 @@ private fun ProfileScreen(
     selectedTheme: CineAppTheme,
     onThemeSelected: (CineAppTheme) -> Unit
 ) {
-    val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 24.dp
+    val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(CineColors.Background),
-        contentPadding = PaddingValues(start = 24.dp, top = topPadding, end = 24.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        contentPadding = PaddingValues(start = 20.dp, top = topPadding, end = 20.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item {
-            Text(
-                text = "Профиль",
-                color = CineColors.PrimaryText,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
         item {
             ProfileSummaryCard(
                 isTmdbConfigured = isTmdbConfigured,
                 stats = stats
             )
+        }
+        item {
+            ProfileProgressCard(stats = stats)
         }
         item {
             ThemeSettingsCard(
@@ -864,94 +962,143 @@ private fun ProfileScreen(
 private fun ProfileSummaryCard(isTmdbConfigured: Boolean, stats: TrackerStats) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = CineColors.Card,
+        border = BorderStroke(1.dp, CineColors.Stroke)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            CineColors.Gold.copy(alpha = 0.16f),
+                            CineColors.Card,
+                            CineColors.Mint.copy(alpha = 0.08f)
+                        )
+                    )
+                )
+        ) {
+            Column(
+                modifier = Modifier.padding(22.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Кинопрофиль",
+                            color = CineColors.PrimaryText,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = if (isTmdbConfigured) "Каталог подключен · данные обновляются" else "Каталог офлайн · работаем с библиотекой",
+                            color = CineColors.SoftText,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(58.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color.White.copy(alpha = 0.1f))
+                            .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(18.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_user),
+                            contentDescription = null,
+                            tint = CineColors.Gold,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ProfileStatTile(
+                        label = "Тайтлов",
+                        value = stats.total.toString(),
+                        color = CineColors.Gold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ProfileStatTile(
+                        label = "Время",
+                        value = stats.watchedMinutes.formatWatchTime(),
+                        color = CineColors.Mint,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ProfileMiniChip(label = "Оценок", value = stats.ratedTitles.toString())
+                    ProfileMiniChip(label = "Серий", value = stats.ratedEpisodes.toString())
+                    ProfileMiniChip(label = "Коллекций", value = stats.collections.toString())
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileProgressCard(stats: TrackerStats) {
+    val total = stats.total.coerceAtLeast(1)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = CineColors.Card,
         border = BorderStroke(1.dp, CineColors.Stroke)
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(60.dp)
-                        .clip(CircleShape)
-                        .background(CineColors.Gold.copy(alpha = 0.14f))
-                        .border(1.dp, CineColors.Gold.copy(alpha = 0.35f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_user),
-                        contentDescription = null,
-                        tint = CineColors.Gold,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Мой профиль",
-                        color = CineColors.PrimaryText,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(if (isTmdbConfigured) CineColors.Mint else CineColors.Coral)
-                        )
-                        Text(
-                            text = if (isTmdbConfigured) "Каталог подключен" else "Каталог не подключен",
-                            color = CineColors.MutedText,
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ProfileStatTile(
-                    label = "Всего тайтлов",
-                    value = stats.total.toString(),
-                    color = CineColors.Gold,
-                    modifier = Modifier.weight(1f)
-                )
-                ProfileStatTile(
-                    label = "Смотрю",
-                    value = stats.watching.toString(),
-                    color = CineColors.Mint,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ProfileStatTile(
-                    label = "Просмотрено",
-                    value = stats.watched.toString(),
-                    color = CineColors.Coral,
-                    modifier = Modifier.weight(1f)
-                )
-                ProfileStatTile(
-                    label = "Время у экрана",
-                    value = stats.watchedMinutes.formatWatchTime(),
-                    color = CineColors.Mint,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ProfileMiniChip(label = "Оценок", value = stats.ratedTitles.toString())
-                ProfileMiniChip(label = "Эпизодов оценено", value = stats.ratedEpisodes.toString())
-                ProfileMiniChip(label = "Коллекций", value = stats.collections.toString())
-            }
+            Text(
+                text = "Прогресс просмотра",
+                color = CineColors.PrimaryText,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            ProfileProgressRow("Смотрю", stats.watching, total, CineColors.Mint)
+            ProfileProgressRow("В плане", stats.planned, total, CineColors.Gold)
+            ProfileProgressRow("Просмотрено", stats.watched, total, CineColors.Coral)
         }
+    }
+}
+
+@Composable
+private fun ProfileProgressRow(label: String, value: Int, total: Int, color: Color) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = CineColors.SoftText,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = value.toString(),
+                color = color,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        LinearProgressIndicator(
+            progress = { (value.toFloat() / total.toFloat()).coerceIn(0f, 1f) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(CircleShape),
+            color = color,
+            trackColor = CineColors.Background.copy(alpha = 0.55f)
+        )
     }
 }
 
@@ -1028,14 +1175,26 @@ private fun EventTimelineCard(events: List<TrackerEvent>) {
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(
-                text = "Хронология",
-                color = CineColors.PrimaryText,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Последние действия",
+                    color = CineColors.PrimaryText,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${events.size}",
+                    color = CineColors.Gold,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
             if (events.isEmpty()) {
                 Text(
                     text = "Здесь появятся оценки, статусы и добавления в коллекции.",
@@ -1044,29 +1203,39 @@ private fun EventTimelineCard(events: List<TrackerEvent>) {
                 )
             } else {
                 events.take(8).forEach { event ->
-                    Row(
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = CineColors.Background.copy(alpha = 0.44f),
+                        border = BorderStroke(1.dp, CineColors.Stroke)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .padding(top = 6.dp)
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(CineColors.Gold)
-                        )
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                text = event.message,
-                                color = CineColors.PrimaryText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(top = 4.dp)
+                                    .size(9.dp)
+                                    .clip(CircleShape)
+                                    .background(CineColors.Gold)
                             )
-                            Text(
-                                text = event.createdAt.formatEventTime(),
-                                color = CineColors.MutedText,
-                                style = MaterialTheme.typography.labelMedium
-                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(
+                                    text = event.message,
+                                    color = CineColors.PrimaryText,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = event.createdAt.formatEventTime(),
+                                    color = CineColors.MutedText,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
                         }
                     }
                 }
@@ -1470,33 +1639,34 @@ private fun EmptyLibraryCard(title: String, subtitle: String) {
 @Composable
 private fun LibraryTitleCard(trackedTitle: TrackedTitle, onClick: () -> Unit) {
     val item = trackedTitle.item
+    val progressPercent = (trackedTitle.progress.coerceIn(0f, 1f) * 100).toInt()
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(112.dp)
+            .height(142.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = CineColors.Card),
-        border = BorderStroke(1.dp, CineColors.Stroke)
+        border = BorderStroke(1.dp, statusColor(trackedTitle.status).copy(alpha = 0.28f))
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
+                .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             PosterArt(
                 item = item,
                 modifier = Modifier
-                    .width(64.dp)
+                    .width(82.dp)
                     .fillMaxHeight(),
-                imageWidthPx = 128,
-                imageHeightPx = 192
+                imageWidthPx = 164,
+                imageHeightPx = 246
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(14.dp))
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
+                verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1509,24 +1679,44 @@ private fun LibraryTitleCard(trackedTitle: TrackedTitle, onClick: () -> Unit) {
                         color = CineColors.PrimaryText,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     StatusBadge(trackedTitle.status)
                 }
-                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = listOf(item.year, item.kind.label).filter { it.isNotBlank() }.joinToString(" · "),
+                    color = CineColors.MutedText,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = item.overview,
+                    color = CineColors.SoftText,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    RatingBadge(score = item.rating, personal = trackedTitle.personalRating, source = item.ratings.primarySource)
-                    Text(
-                        text = item.year,
-                        color = CineColors.MutedText,
-                        style = MaterialTheme.typography.bodySmall
+                    RatingBadge(
+                        score = item.rating,
+                        personal = trackedTitle.personalRating,
+                        source = item.ratings.primarySource
                     )
+                    if (trackedTitle.status != TrackStatus.Planned) {
+                        Text(
+                            text = "$progressPercent%",
+                            color = statusColor(trackedTitle.status),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
-                Spacer(Modifier.height(10.dp))
                 LinearProgressIndicator(
                     progress = { trackedTitle.progress },
                     modifier = Modifier
@@ -1583,7 +1773,6 @@ private fun DetailScreen(
                 },
                 onRatingSelected = {
                     onSetRating(it)
-                    onSetStatus(currentStatus ?: TrackStatus.Planned)
                 }
             )
         }
@@ -2009,14 +2198,15 @@ private fun RatingPickerSheet(
         sheetState = sheetState,
         containerColor = Color(0xFF101012),
         dragHandle = null,
-        modifier = Modifier.fillMaxHeight(0.96f)
+        modifier = Modifier.fillMaxHeight()
     ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight()
                 .padding(bottom = 34.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(22.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             item {
                 Box(
@@ -2050,9 +2240,9 @@ private fun RatingPickerSheet(
             item {
                 PosterArt(
                     item = item,
-                    modifier = Modifier
-                        .width(150.dp)
-                        .height(222.dp)
+                        modifier = Modifier
+                            .width(132.dp)
+                            .height(196.dp)
                 )
             }
             item {
@@ -2116,35 +2306,42 @@ private fun RatingScorePicker(
     selectedRating: Int,
     onRatingSelected: (Int) -> Unit
 ) {
-    LazyRow(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(132.dp),
-        contentPadding = PaddingValues(horizontal = 34.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 22.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items((1..10).toList()) { score ->
-            val isSelected = score == selectedRating
-            val size by animateDpAsState(
-                targetValue = if (isSelected) 112.dp else 58.dp,
-                label = "rating-score-size"
-            )
-            Box(
-                modifier = Modifier
-                    .size(size)
-                    .clip(CircleShape)
-                    .background(if (isSelected) ratingColor(score) else Color.Transparent)
-                    .clickable { onRatingSelected(score) }
-                    .bounceClick(),
-                contentAlignment = Alignment.Center
+        listOf(1..5, 6..10).forEach { rowScores ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = score.toString(),
-                    color = if (isSelected) ratingContentColor(score) else Color.White,
-                    fontSize = if (isSelected) 48.sp else 34.sp,
-                    fontWeight = FontWeight.ExtraBold
-                )
+                rowScores.forEach { score ->
+                    val isSelected = score == selectedRating
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(62.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(if (isSelected) ratingColor(score) else Color.White.copy(alpha = 0.08f))
+                            .border(
+                                1.dp,
+                                if (isSelected) ratingColor(score) else Color.White.copy(alpha = 0.12f),
+                                RoundedCornerShape(18.dp)
+                            )
+                            .clickable { onRatingSelected(score) }
+                            .bounceClick(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = score.toString(),
+                            color = if (isSelected) ratingContentColor(score) else Color.White,
+                            fontSize = if (isSelected) 26.sp else 22.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                }
             }
         }
     }
@@ -2265,15 +2462,55 @@ private fun EpisodeTrackerBlock(
     onSeasonSelected: (Int) -> Unit
 ) {
     if (seasons.isEmpty()) return
+    var isExpanded by remember { mutableStateOf(false) }
 
     var selectedSeasonNumber by remember(seasons) { mutableStateOf(seasons.first().number) }
     val selectedSeason = seasons.firstOrNull { it.number == selectedSeasonNumber } ?: seasons.first()
-    LaunchedEffect(selectedSeason.number) {
-        onSeasonSelected(selectedSeason.number)
+    val episodeCount = seasons.sumOf { it.episodeCount }
+    LaunchedEffect(selectedSeason.number, isExpanded) {
+        if (isExpanded) {
+            onSeasonSelected(selectedSeason.number)
+        }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionHeader(title = "Сезоны и серии", action = "")
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { isExpanded = !isExpanded },
+            shape = RoundedCornerShape(20.dp),
+            color = CineColors.Card,
+            border = BorderStroke(1.dp, CineColors.Stroke)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        text = "Сезоны и серии",
+                        color = CineColors.PrimaryText,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${seasons.size} сез. · $episodeCount эп.",
+                        color = CineColors.MutedText,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Text(
+                    text = if (isExpanded) "Скрыть" else "Показать",
+                    color = CineColors.Gold,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        if (!isExpanded) return@Column
+
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(seasons, key = { it.number }) { season ->
                 LibraryFilterChip(
