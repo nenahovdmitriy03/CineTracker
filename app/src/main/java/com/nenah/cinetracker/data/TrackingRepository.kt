@@ -16,7 +16,9 @@ import com.nenah.cinetracker.model.TrackStatus
 import com.nenah.cinetracker.model.TrackedTitle
 import com.nenah.cinetracker.model.TrackerEvent
 import com.nenah.cinetracker.model.TrackerStats
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 class TrackingRepository(context: Context) {
@@ -24,7 +26,7 @@ class TrackingRepository(context: Context) {
 
     fun observeAll(): Flow<List<TrackedTitle>> = dao.observeAll().map { entities ->
         entities.map(TrackedTitleEntity::toTrackedTitle)
-    }
+    }.flowOn(Dispatchers.Default)
 
     fun observeOne(item: MediaItem): Flow<TrackedTitle?> {
         return dao.observeOne(item.id, item.kind.routeValue).map { it?.toTrackedTitle() }
@@ -40,7 +42,7 @@ class TrackingRepository(context: Context) {
                 .filter { it.status == TrackStatus.Watched && it.item.kind == MediaKind.Movie }
                 .sumOf { it.item.runtimeMinutes ?: 100 }
         )
-    }
+    }.flowOn(Dispatchers.Default)
 
     fun observeEpisodeRatings(item: MediaItem): Flow<List<EpisodeRating>> {
         return dao.observeEpisodeRatings(item.id, item.kind.routeValue).map { ratings ->
@@ -71,7 +73,7 @@ class TrackingRepository(context: Context) {
     fun observeCollectionItems(collectionId: Long): Flow<List<MediaItem>> {
         return dao.observeCollectionItems(collectionId).map { items ->
             items.map { it.toMediaItem() }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     suspend fun setRating(item: MediaItem, rating: Int) {

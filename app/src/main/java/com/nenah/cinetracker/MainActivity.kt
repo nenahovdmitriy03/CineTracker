@@ -783,7 +783,11 @@ private fun LibraryScreen(
                 )
             }
         }
-        items(visibleTitles, key = { it.item.mediaKey() }) { trackedTitle ->
+        items(
+            items = visibleTitles,
+            key = { it.item.mediaKey() },
+            contentType = { it.status.routeValue }
+        ) { trackedTitle ->
             LibraryTitleCard(
                 trackedTitle = trackedTitle,
                 onClick = { onOpenItem(trackedTitle.item) }
@@ -1463,7 +1467,9 @@ private fun LibraryTitleCard(trackedTitle: TrackedTitle, onClick: () -> Unit) {
                 item = item,
                 modifier = Modifier
                     .width(64.dp)
-                    .fillMaxHeight()
+                    .fillMaxHeight(),
+                imageWidthPx = 128,
+                imageHeightPx = 192
             )
             Spacer(Modifier.width(12.dp))
             Column(
@@ -3122,10 +3128,22 @@ private fun SectionListCard(item: MediaItem, personalRating: Int?, onClick: () -
 private fun PosterArt(
     item: MediaItem,
     modifier: Modifier = Modifier,
-    dynamicAccent: Boolean = false
+    dynamicAccent: Boolean = false,
+    imageWidthPx: Int = 360,
+    imageHeightPx: Int = 540
 ) {
+    val context = LocalContext.current
     var imageFailed by remember(item.posterUrl) { mutableStateOf(false) }
     val accent = rememberImageAccent(item.posterUrl, item.id, enabled = dynamicAccent)
+    val posterModel = remember(context, item.posterUrl, imageWidthPx, imageHeightPx) {
+        item.posterUrl?.let { posterUrl ->
+            ImageRequest.Builder(context)
+                .data(posterUrl)
+                .size(imageWidthPx, imageHeightPx)
+                .crossfade(false)
+                .build()
+        }
+    }
     val posterShape = RoundedCornerShape(18.dp)
 
     Box(
@@ -3134,9 +3152,9 @@ private fun PosterArt(
             .background(Brush.linearGradient(gradientFor(item.id)))
             .border(1.dp, accent.copy(alpha = 0.58f), posterShape)
     ) {
-        if (item.posterUrl != null && !imageFailed) {
+        if (posterModel != null && !imageFailed) {
             AsyncImage(
-                model = item.posterUrl,
+                model = posterModel,
                 contentDescription = item.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

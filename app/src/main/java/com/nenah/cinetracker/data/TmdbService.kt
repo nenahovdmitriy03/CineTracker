@@ -2,6 +2,7 @@ package com.nenah.cinetracker.data
 
 import android.content.Context
 import android.util.Log
+import com.nenah.cinetracker.BuildConfig
 import okhttp3.Cache
 import okhttp3.Dns
 import okhttp3.OkHttpClient
@@ -107,10 +108,12 @@ interface TmdbService {
 
 object TmdbNetwork {
     fun create(readAccessToken: String, baseUrl: String): TmdbService {
+        val normalizedBaseUrl = baseUrl.ensureTrailingSlash()
+        val useSystemDns = !normalizedBaseUrl.isOfficialTmdbHost(TMDB_API_HOST)
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
         }
-        val client = createBaseClient()
+        val client = createBaseClient(useSystemDns = useSystemDns)
             .addInterceptor { chain ->
                 val requestBuilder = chain.request().newBuilder()
                     .addHeader("accept", "application/json")
@@ -124,7 +127,7 @@ object TmdbNetwork {
             .build()
 
         return Retrofit.Builder()
-            .baseUrl(baseUrl)
+            .baseUrl(normalizedBaseUrl)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
@@ -132,12 +135,26 @@ object TmdbNetwork {
     }
 
     fun createImageClient(context: Context): OkHttpClient {
-        return createBaseClient()
+        val useSystemDns = !BuildConfig.TMDB_IMAGE_BASE_URL.isOfficialTmdbHost(TMDB_IMAGE_HOST)
+        return createBaseClient(useSystemDns = useSystemDns)
             .cache(Cache(context.cacheDir.resolve("tmdb_image_http_cache"), 80L * 1024L * 1024L))
             .build()
     }
 
-    private fun createBaseClient(): OkHttpClient.Builder {
+    private fun createBaseClient(useSystemDns: Boolean = false): OkHttpClient.Builder {
+        val builder = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .addHeader("User-Agent", "CineTracker Android debug")
+                        .build()
+                )
+            }
+
+        if (useSystemDns) {
+            return builder
+        }
+
         val bootstrapClient = OkHttpClient.Builder().build()
         val dnsProviders = listOf(
             DohProvider(
@@ -183,20 +200,25 @@ object TmdbNetwork {
                 }
             }
 
+            val systemAddresses = runCatching {
+                Dns.SYSTEM.lookup(hostname).filterNot { it.isBlockedAddress() }
+            }.onFailure { lastError = it }.getOrDefault(emptyList())
+
+            Log.d(
+                "TmdbNetwork",
+                "DNS System $hostname -> ${systemAddresses.joinToString { it.hostAddress.orEmpty() }}"
+            )
+
+            if (systemAddresses.isNotEmpty()) {
+                return@Dns systemAddresses
+            }
+
             throw UnknownHostException("No public DNS result for $hostname").apply {
                 if (lastError != null) initCause(lastError)
             }
         }
 
-        return OkHttpClient.Builder()
-            .dns(resilientDns)
-            .addInterceptor { chain ->
-                chain.proceed(
-                    chain.request().newBuilder()
-                        .addHeader("User-Agent", "CineTracker Android debug")
-                        .build()
-                )
-            }
+        return builder.dns(resilientDns)
     }
 
     private fun createDoh(
@@ -220,4 +242,13 @@ object TmdbNetwork {
     private fun InetAddress.isBlockedAddress(): Boolean {
         return isAnyLocalAddress || isLoopbackAddress || isLinkLocalAddress || isSiteLocalAddress
     }
+
+    private const val TMDB_API_HOST = "api.themoviedb.org"
+    private const val TMDB_IMAGE_HOST = "image.tmdb.org"
+}
+
+private fun String.ensureTrailingSlash(): String = if (endsWith("/")) this else "$this/"
+
+private fun String.isOfficialTmdbHost(host: String): Boolean {
+    return runCatching { ensureTrailingSlash().toHttpUrl().host == host }.getOrDefault(false)
 }
