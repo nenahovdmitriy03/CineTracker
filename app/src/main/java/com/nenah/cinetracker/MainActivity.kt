@@ -299,8 +299,7 @@ private fun CineNavHost(
         }
         composable(CineTab.Library.route) {
             LibraryScreen(
-                trackedTitles = uiState.trackedTitles,
-                collections = uiState.collections,
+                viewModel = viewModel,
                 onCreateCollection = onCreateCollection,
                 onOpenCollection = { id, name -> navController.navigate("collection/$id/$name") },
                 onOpenItem = onOpenItem
@@ -750,22 +749,22 @@ private fun messageColor(message: String?): Color {
 
 @Composable
 private fun LibraryScreen(
-    trackedTitles: List<TrackedTitle>,
-    collections: List<MediaCollection>,
+    viewModel: CineViewModel,
     onCreateCollection: (String) -> Unit,
     onOpenCollection: (Long, String) -> Unit,
     onOpenItem: (MediaItem) -> Unit
 ) {
-    var selectedStatus by remember { mutableStateOf<TrackStatus?>(null) }
     var newCollectionName by remember { mutableStateOf("") }
-    var visibleLimit by remember(trackedTitles, selectedStatus) { mutableStateOf(LibraryPageSize) }
+    var visibleLimit by remember { mutableStateOf(LibraryPageSize) }
     val listState = rememberLazyListState()
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp
-    val visibleTitles = remember(trackedTitles, selectedStatus) {
-        trackedTitles
-            .filter { selectedStatus == null || it.status == selectedStatus }
-            .sortedByDescending { it.updatedAt }
-    }
+    
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val trackedTitles = uiState.trackedTitles
+    val visibleTitles by viewModel.filteredLibraryTitles.collectAsStateWithLifecycle()
+    val selectedStatus = uiState.libraryStatusFilter
+    val collections = uiState.collections
+
     val pagedTitles = remember(visibleTitles, visibleLimit) {
         visibleTitles.take(visibleLimit)
     }
@@ -818,7 +817,7 @@ private fun LibraryScreen(
         item {
             LibraryStatusFilterRow(
                 selectedStatus = selectedStatus,
-                onStatusSelected = { selectedStatus = it }
+                onStatusSelected = { viewModel.setLibraryStatus(it) }
             )
         }
         if (visibleTitles.isEmpty()) {
