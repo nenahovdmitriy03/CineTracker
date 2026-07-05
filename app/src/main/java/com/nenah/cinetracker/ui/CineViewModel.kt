@@ -23,6 +23,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
+data class AiChatMessage(
+    val text: String,
+    val isUser: Boolean,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
 data class CineUiState(
     val homeFeed: HomeFeed? = null,
     val isHomeLoading: Boolean = true,
@@ -42,6 +48,10 @@ data class CineUiState(
     val searchQuery: String = "",
     val searchResults: List<MediaItem> = emptyList(),
     val isSearchLoading: Boolean = false,
+    val aiChatMessages: List<AiChatMessage> = emptyList(),
+    val aiChatInput: String = "",
+    val isAiChatLoading: Boolean = false,
+    val aiChatError: String? = null,
     val manualLink: String = "",
     val isManualAddLoading: Boolean = false,
     val manualAddMessage: String? = null,
@@ -374,6 +384,123 @@ class CineViewModel(
             val result = repository.rollRoulette()
             _uiState.update { it.copy(rouletteResult = result, isRouletteLoading = false) }
         }
+    }
+
+    fun updateAiChatInput(input: String) {
+        _uiState.update { it.copy(aiChatInput = input, aiChatError = null) }
+    }
+
+    fun sendAiChatMessage() {
+        val userText = _uiState.value.aiChatInput.trim()
+        if (userText.isBlank() || _uiState.value.isAiChatLoading) return
+
+        val userMessage = AiChatMessage(text = userText, isUser = true)
+        _uiState.update {
+            it.copy(
+                aiChatMessages = it.aiChatMessages + userMessage,
+                aiChatInput = "",
+                aiChatError = null,
+                isAiChatLoading = true
+            )
+        }
+
+        viewModelScope.launch {
+            val apiKey = com.nenah.cinetracker.BuildConfig.GEMINI_API_KEY.trim()
+            if (apiKey.isBlank()) {
+                _uiState.update {
+                    it.copy(
+                        aiChatMessages = it.aiChatMessages + AiChatMessage(
+                            text = "AI-чат не настроен. Добавь gemini.api.key в local.properties или переменную окружения GEMINI_API_KEY.",
+                            isUser = false
+                        ),
+                        isAiChatLoading = false,
+                        aiChatError = "Не настроен ключ Gemini."
+                    )
+                }
+                return@launch
+            }
+
+            try {
+                val model = com.google.ai.client.generativeai.GenerativeModel(
+                    modelName = "gemini-1.5-flash",
+                    apiKey = apiKey
+                )
+                val response = model.generateContent(buildAiChatPrompt(userText))
+                val answer = response.text?.trim()
+                _uiState.update {
+                    it.copy(
+                        aiChatMessages = it.aiChatMessages + AiChatMessage(
+                            text = if (answer.isNullOrBlank()) {
+                                "Не смог собрать ответ. Попробуй спросить чуть иначе."
+                            } else {
+                                answer
+                            },
+                            isUser = false
+                        ),
+                        isAiChatLoading = false,
+                        aiChatError = null
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        aiChatMessages = it.aiChatMessages + AiChatMessage(
+                            text = "Не получилось получить ответ AI: ${e.message ?: "неизвестная ошибка"}",
+                            isUser = false
+                        ),
+                        isAiChatLoading = false,
+                        aiChatError = e.message
+                    )
+                }
+            }
+        }
+    }
+
+    private fun buildAiChatPrompt(userText: String): String {
+        val state = _uiState.value
+        val trackedContext = state.trackedTitles
+            .sortedByDescending { it.updatedAt }
+            .take(80)
+            .joinToString("\n") { tracked ->
+                val rating = tracked.personalRating?.let { ", оценка $it/10" }.orEmpty()
+                "- ${tracked.item.title} (${tracked.item.year.ifBlank { "год неизвестен" }}), ${tracked.item.kind.label}, статус: ${tracked.status.title}$rating"
+            }
+            .ifBlank { "- Пользователь пока почти не заполнил список." }
+
+        val catalogueContext = state.homeFeed?.let { feed ->
+            (feed.trending + feed.newReleases + feed.popularMovies + feed.popularShows + feed.anime)
+                .distinctBy { it.kind.routeValue + ":" + it.id }
+                .take(50)
+                .joinToString("\n") { item ->
+                    val score = item.ratings.primaryScore.takeIf { rating -> rating > 0.0 } ?: item.rating
+                    "- ${item.title} (${item.year.ifBlank { "год неизвестен" }}), ${item.kind.label}, рейтинг $score"
+                }
+        }.orEmpty().ifBlank { "- Каталог еще не загружен." }
+
+        val recentDialog = state.aiChatMessages
+            .takeLast(10)
+            .joinToString("\n") { message ->
+                "${if (message.isUser) "Пользователь" else "AI"}: ${message.text}"
+            }
+
+        return """
+            Ты кино-ассистент внутри приложения CineTracker. Отвечай на русском, дружелюбно и по делу.
+            Подбирай фильмы и сериалы под вкус пользователя, учитывай оценки, статусы и уже просмотренное.
+            Если советуешь тайтлы, дай 3-7 вариантов с короткой причиной, годом и пометкой фильм/сериал.
+            Не советуй то, что явно уже просмотрено, если пользователь сам не просит обсудить просмотренное.
+
+            Список пользователя:
+            $trackedContext
+
+            Текущий каталог/тренды:
+            $catalogueContext
+
+            Последний диалог:
+            $recentDialog
+
+            Новый вопрос пользователя:
+            $userText
+        """.trimIndent()
     }
 
     fun getAiRecommendations() {

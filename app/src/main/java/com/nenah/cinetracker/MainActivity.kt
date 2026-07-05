@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -130,6 +131,7 @@ import com.nenah.cinetracker.model.TrackStatus
 import com.nenah.cinetracker.model.TrackedTitle
 import com.nenah.cinetracker.model.TrackerEvent
 import com.nenah.cinetracker.model.TrackerStats
+import com.nenah.cinetracker.ui.AiChatMessage
 import com.nenah.cinetracker.ui.CineUiState
 import com.nenah.cinetracker.ui.CineViewModel
 import com.nenah.cinetracker.ui.theme.CineTrackerTheme
@@ -213,7 +215,8 @@ fun CineTrackerApp(viewModel: CineViewModel = viewModel()) {
                 onSearchQueryChanged = viewModel::updateSearchQuery,
                 onManualLinkChanged = viewModel::updateManualLink,
                 onAddManualLink = viewModel::addManualLinkToPlan,
-                onGetAiRecommendations = viewModel::getAiRecommendations,
+                onAiChatInputChanged = viewModel::updateAiChatInput,
+                onSendAiChatMessage = viewModel::sendAiChatMessage,
                 onOpenDetail = viewModel::openDetail,
                 onRefreshHome = viewModel::refreshHome,
                 onSetStatus = viewModel::setSelectedStatus,
@@ -244,7 +247,8 @@ private fun CineNavHost(
     onSearchQueryChanged: (String) -> Unit,
     onManualLinkChanged: (String) -> Unit,
     onAddManualLink: () -> Unit,
-    onGetAiRecommendations: () -> Unit,
+    onAiChatInputChanged: (String) -> Unit,
+    onSendAiChatMessage: () -> Unit,
     onOpenDetail: (MediaKind, Int) -> Unit,
     onRefreshHome: () -> Unit,
     onSetStatus: (TrackStatus) -> Unit,
@@ -293,8 +297,20 @@ private fun CineNavHost(
                 onQueryChanged = onSearchQueryChanged,
                 onManualLinkChanged = onManualLinkChanged,
                 onAddManualLink = onAddManualLink,
-                onGetAiRecommendations = onGetAiRecommendations,
+                onOpenAiChat = {
+                    navController.navigate(AiChatRoute) {
+                        launchSingleTop = true
+                    }
+                },
                 onOpenItem = onOpenItem
+            )
+        }
+        composable(AiChatRoute) {
+            AiChatScreen(
+                uiState = uiState,
+                onBack = onBack,
+                onInputChanged = onAiChatInputChanged,
+                onSend = onSendAiChatMessage
             )
         }
         composable(CineTab.Library.route) {
@@ -570,13 +586,10 @@ private fun SearchScreen(
     onQueryChanged: (String) -> Unit,
     onManualLinkChanged: (String) -> Unit,
     onAddManualLink: () -> Unit,
-    onGetAiRecommendations: () -> Unit,
+    onOpenAiChat: () -> Unit,
     onOpenItem: (MediaItem) -> Unit
 ) {
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp
-    val aiRecommendations = remember(uiState.homeFeed, uiState.trackedTitles, uiState.searchResults) {
-        uiState.aiRecommendationItems()
-    }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -585,7 +598,7 @@ private fun SearchScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item {
-            SearchHeader()
+            SearchHeader(onOpenAiChat = onOpenAiChat)
         }
         item {
             TextField(
@@ -615,12 +628,6 @@ private fun SearchScreen(
             )
         }
         item {
-            AiRecommendationCard(
-                recommendations = aiRecommendations,
-                onOpenItem = onOpenItem
-            )
-        }
-        item {
             ManualLinkCard(
                 link = uiState.manualLink,
                 isLoading = uiState.isManualAddLoading,
@@ -639,7 +646,252 @@ private fun SearchScreen(
 }
 
 @Composable
-private fun SearchHeader() {
+private fun AiChatScreen(
+    uiState: CineUiState,
+    onBack: () -> Unit,
+    onInputChanged: (String) -> Unit,
+    onSend: () -> Unit
+) {
+    val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 14.dp
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(CineColors.Background)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, top = topPadding, end = 16.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_arrow_back),
+                    contentDescription = "Назад",
+                    tint = CineColors.PrimaryText
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "AI-чат",
+                    color = CineColors.PrimaryText,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    text = "Подбор фильмов и сериалов",
+                    color = CineColors.MutedText,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            AiBadge()
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (uiState.aiChatMessages.isEmpty()) {
+                item {
+                    AiChatEmptyState(onSuggestionClick = onInputChanged)
+                }
+            }
+            items(uiState.aiChatMessages) { message ->
+                AiChatBubble(message = message)
+            }
+            if (uiState.isAiChatLoading) {
+                item {
+                    AiChatLoadingBubble()
+                }
+            }
+        }
+
+        AiChatInputBar(
+            input = uiState.aiChatInput,
+            isLoading = uiState.isAiChatLoading,
+            onInputChanged = onInputChanged,
+            onSend = onSend
+        )
+    }
+}
+
+@Composable
+private fun AiChatEmptyState(onSuggestionClick: (String) -> Unit) {
+    val suggestions = listOf(
+        "Посоветуй фильм на вечер",
+        "Хочу сериал на выходные",
+        "Что посмотреть из фантастики?"
+    )
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = CineColors.Card,
+        border = BorderStroke(1.dp, CineColors.Gold.copy(alpha = 0.24f))
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = "Что посмотрим?",
+                color = CineColors.PrimaryText,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold
+            )
+            Text(
+                text = "AI учитывает твой список, оценки и текущий каталог.",
+                color = CineColors.MutedText,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(suggestions) { suggestion ->
+                    Surface(
+                        onClick = { onSuggestionClick(suggestion) },
+                        shape = RoundedCornerShape(18.dp),
+                        color = CineColors.Background.copy(alpha = 0.72f),
+                        border = BorderStroke(1.dp, CineColors.Stroke)
+                    ) {
+                        Text(
+                            text = suggestion,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            color = CineColors.PrimaryText,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiChatBubble(message: AiChatMessage) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(if (message.isUser) 0.82f else 0.9f),
+            shape = RoundedCornerShape(
+                topStart = 22.dp,
+                topEnd = 22.dp,
+                bottomStart = if (message.isUser) 22.dp else 6.dp,
+                bottomEnd = if (message.isUser) 6.dp else 22.dp
+            ),
+            color = if (message.isUser) CineColors.Gold else CineColors.Card,
+            border = if (message.isUser) null else BorderStroke(1.dp, CineColors.Stroke)
+        ) {
+            Text(
+                text = message.text,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+                color = if (message.isUser) CineColors.OnGold else CineColors.PrimaryText,
+                style = MaterialTheme.typography.bodyMedium,
+                lineHeight = 20.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiChatLoadingBubble() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Start
+    ) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = CineColors.Card,
+            border = BorderStroke(1.dp, CineColors.Stroke)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = CineColors.Gold
+                )
+                Text(
+                    text = "AI думает...",
+                    color = CineColors.MutedText,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiChatInputBar(
+    input: String,
+    isLoading: Boolean,
+    onInputChanged: (String) -> Unit,
+    onSend: () -> Unit
+) {
+    val bottomPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = CineColors.Background,
+        border = BorderStroke(1.dp, CineColors.Stroke)
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                start = 16.dp,
+                top = 12.dp,
+                end = 16.dp,
+                bottom = 16.dp + bottomPadding
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            TextField(
+                value = input,
+                onValueChange = onInputChanged,
+                modifier = Modifier.weight(1f),
+                enabled = !isLoading,
+                maxLines = 4,
+                shape = RoundedCornerShape(20.dp),
+                placeholder = { Text("Спроси, что посмотреть") },
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = CineColors.Card,
+                    unfocusedContainerColor = CineColors.Card,
+                    disabledContainerColor = CineColors.Card,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    focusedTextColor = CineColors.PrimaryText,
+                    unfocusedTextColor = CineColors.PrimaryText,
+                    disabledTextColor = CineColors.MutedText,
+                    focusedPlaceholderColor = CineColors.MutedText,
+                    unfocusedPlaceholderColor = CineColors.MutedText
+                )
+            )
+            Button(
+                onClick = onSend,
+                enabled = input.isNotBlank() && !isLoading,
+                shape = RoundedCornerShape(18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = CineColors.Gold,
+                    contentColor = CineColors.OnGold,
+                    disabledContainerColor = CineColors.Card,
+                    disabledContentColor = CineColors.MutedText
+                )
+            ) {
+                Text("Отправить", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchHeader(onOpenAiChat: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -650,13 +902,17 @@ private fun SearchHeader() {
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold
         )
-        AiBadge()
+        AiBadge(onClick = onOpenAiChat)
     }
 }
 
 @Composable
-private fun AiBadge() {
+private fun AiBadge(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
+) {
     Surface(
+        modifier = if (onClick == null) modifier else modifier.clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
         color = CineColors.Gold,
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
@@ -4197,6 +4453,7 @@ private fun MediaItem.mediaKey(): String = "${kind.routeValue}:$id"
 private fun List<MediaItem>.distinctForUi(): List<MediaItem> = distinctBy { it.mediaKey() }
 
 private const val LibraryPageSize = 60
+private const val AiChatRoute = "ai-chat"
 
 private enum class CineTab(
     val route: String,

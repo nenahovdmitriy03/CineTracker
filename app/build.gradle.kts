@@ -57,12 +57,13 @@ android {
         val tmdbImageBaseUrl = configValue("tmdb.image.baseUrl", "TMDB_IMAGE_BASE_URL", defaultTmdbImageBaseUrl)
         val poiskKinoApiKey = configValue("poiskkino.api.key", "POISKKINO_API_KEY")
         val poiskKinoApiBaseUrl = configValue("poiskkino.api.baseUrl", "POISKKINO_API_BASE_URL", "https://api.poiskkino.dev/")
+        val geminiApiKey = configValue("gemini.api.key", "GEMINI_API_KEY")
         buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"${tmdbToken.escapeBuildConfigString()}\"")
         buildConfigField("String", "TMDB_API_BASE_URL", "\"${tmdbApiBaseUrl.escapeBuildConfigString()}\"")
         buildConfigField("String", "TMDB_IMAGE_BASE_URL", "\"${tmdbImageBaseUrl.escapeBuildConfigString()}\"")
         buildConfigField("String", "POISKKINO_API_KEY", "\"${poiskKinoApiKey.escapeBuildConfigString()}\"")
         buildConfigField("String", "POISKKINO_API_BASE_URL", "\"${poiskKinoApiBaseUrl.escapeBuildConfigString()}\"")
-        buildConfigField("String", "GEMINI_API_KEY", "\"AQ.Ab8RN6LrD_sUtbSwfmRBIRXLJMOQYq_EdMStX161mHld6o73uw\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"${geminiApiKey.escapeBuildConfigString()}\"")
     }
 
     buildTypes {
