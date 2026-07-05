@@ -20,8 +20,17 @@ import com.nenah.cinetracker.model.TrackerEvent
 import com.nenah.cinetracker.model.TrackerStats
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+<<<<<<< Updated upstream
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+=======
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+>>>>>>> Stashed changes
 
 data class CineUiState(
     val homeFeed: HomeFeed? = null,
@@ -65,13 +74,21 @@ class CineViewModel(
     )
     val uiState: StateFlow<CineUiState> = _uiState.asStateFlow()
 
+<<<<<<< Updated upstream
     val filteredLibraryTitles = combine(
+=======
+    val filteredLibraryTitles = kotlinx.coroutines.flow.combine(
+>>>>>>> Stashed changes
         _uiState.map { it.trackedTitles },
         _uiState.map { it.libraryStatusFilter }
     ) { titles, status ->
         titles.filter { status == null || it.status == status }
               .sortedByDescending { it.updatedAt }
+<<<<<<< Updated upstream
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+=======
+    }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000), emptyList())
+>>>>>>> Stashed changes
 
     private var searchJob: Job? = null
     private var detailTrackingJob: Job? = null
