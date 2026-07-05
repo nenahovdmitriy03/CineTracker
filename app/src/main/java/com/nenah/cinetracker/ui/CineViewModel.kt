@@ -23,6 +23,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
+private const val AiChatModelName = "gemini-2.5-flash"
+
 data class AiChatMessage(
     val text: String,
     val isUser: Boolean,
@@ -422,7 +424,7 @@ class CineViewModel(
 
             try {
                 val model = com.google.ai.client.generativeai.GenerativeModel(
-                    modelName = "gemini-1.5-flash",
+                    modelName = AiChatModelName,
                     apiKey = apiKey
                 )
                 val response = model.generateContent(buildAiChatPrompt(userText))
@@ -442,14 +444,15 @@ class CineViewModel(
                     )
                 }
             } catch (e: Exception) {
+                val errorMessage = aiChatErrorMessage(e)
                 _uiState.update {
                     it.copy(
                         aiChatMessages = it.aiChatMessages + AiChatMessage(
-                            text = "Не получилось получить ответ AI: ${e.message ?: "неизвестная ошибка"}",
+                            text = errorMessage,
                             isUser = false
                         ),
                         isAiChatLoading = false,
-                        aiChatError = e.message
+                        aiChatError = errorMessage
                     )
                 }
             }
@@ -503,11 +506,28 @@ class CineViewModel(
         """.trimIndent()
     }
 
+    private fun aiChatErrorMessage(error: Throwable): String {
+        val details = error.message.orEmpty()
+        return when {
+            details.contains("404") || details.contains("not found", ignoreCase = true) ->
+                "AI-модель была недоступна. Я переключил чат на актуальную модель, попробуй отправить сообщение ещё раз."
+            details.contains("API key", ignoreCase = true) ||
+                details.contains("permission", ignoreCase = true) ||
+                details.contains("unauthorized", ignoreCase = true) ->
+                "AI-ключ не принят. Проверь ключ Gemini в local.properties или переменную GEMINI_API_KEY."
+            details.contains("quota", ignoreCase = true) ||
+                details.contains("429") ->
+                "Лимит AI временно закончился. Попробуй ещё раз чуть позже."
+            else ->
+                "AI сейчас не смог ответить. Попробуй ещё раз через минуту."
+        }
+    }
+
     fun getAiRecommendations() {
         viewModelScope.launch {
             _uiState.update { it.copy(isSearchLoading = true) }
             val model = com.google.ai.client.generativeai.GenerativeModel(
-                modelName = "gemini-1.5-flash",
+                modelName = AiChatModelName,
                 apiKey = com.nenah.cinetracker.BuildConfig.GEMINI_API_KEY
             )
             

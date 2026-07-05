@@ -40,8 +40,12 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -1103,7 +1107,7 @@ private fun LibraryScreen(
 ) {
     var newCollectionName by remember { mutableStateOf("") }
     var visibleLimit by remember { mutableStateOf(LibraryPageSize) }
-    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp
     
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -1120,9 +1124,9 @@ private fun LibraryScreen(
     val watchedCount = remember(trackedTitles) { trackedTitles.count { it.status == TrackStatus.Watched } }
     val ratedCount = remember(trackedTitles) { trackedTitles.count { it.personalRating != null } }
 
-    LaunchedEffect(listState, visibleTitles.size, visibleLimit) {
+    LaunchedEffect(gridState, visibleTitles.size, visibleLimit) {
         if (visibleLimit >= visibleTitles.size) return@LaunchedEffect
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
             .map { lastVisibleIndex -> lastVisibleIndex >= visibleLimit - 8 }
             .distinctUntilChanged()
             .collect { shouldLoadMore ->
@@ -1132,15 +1136,17 @@ private fun LibraryScreen(
             }
     }
 
-    LazyColumn(
-        state = listState,
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(2),
+        state = gridState,
         modifier = Modifier
             .fillMaxSize()
             .background(CineColors.Background),
         contentPadding = PaddingValues(start = 20.dp, top = topPadding, end = 20.dp, bottom = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             LibraryMinimalHeader(
                 total = trackedTitles.size,
                 watching = watchingCount,
@@ -1149,7 +1155,7 @@ private fun LibraryScreen(
                 rated = ratedCount
             )
         }
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             CollectionsBlock(
                 collections = collections,
                 newCollectionName = newCollectionName,
@@ -1161,7 +1167,7 @@ private fun LibraryScreen(
                 }
             )
         }
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             LibraryStatusFilterRow(
                 selectedStatus = selectedStatus,
                 totalCount = trackedTitles.size,
@@ -1172,7 +1178,7 @@ private fun LibraryScreen(
             )
         }
         if (visibleTitles.isEmpty()) {
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 EmptyLibraryCard(
                     title = if (trackedTitles.isEmpty()) "Список пуст" else "В этой категории пусто",
                     subtitle = if (trackedTitles.isEmpty()) {
@@ -1183,12 +1189,12 @@ private fun LibraryScreen(
                 )
             }
         }
-        items(
+        gridItems(
             items = pagedTitles,
             key = { it.item.mediaKey() },
             contentType = { it.status.routeValue }
         ) { trackedTitle ->
-            LibraryTitleCardMinimal(
+            LibraryPosterCard(
                 trackedTitle = trackedTitle,
                 onClick = { onOpenItem(trackedTitle.item) }
             )
@@ -2125,6 +2131,96 @@ private fun EmptyLibraryCard(title: String, subtitle: String) {
                     text = subtitle,
                     color = CineColors.MutedText,
                     style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryPosterCard(trackedTitle: TrackedTitle, onClick: () -> Unit) {
+    val item = trackedTitle.item
+    val accent = statusColor(trackedTitle.status)
+    val progress = trackedTitle.progress.coerceIn(0f, 1f)
+    val serviceRating = item.ratings.primaryScore
+        .takeIf { it > 0.0 }
+        ?: item.rating.takeIf { it > 0.0 }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box {
+            PosterArt(
+                item = item,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(2f / 3f),
+                imageWidthPx = 320,
+                imageHeightPx = 480
+            )
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = CineColors.Background.copy(alpha = 0.82f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
+            ) {
+                Text(
+                    text = trackedTitle.personalRating?.let { "Моя $it" } ?: serviceRating.formatRating(),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                    color = trackedTitle.personalRating?.let(::ratingColor) ?: CineColors.Gold,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1
+                )
+            }
+        }
+
+        Column(
+            modifier = Modifier.height(64.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = item.title,
+                color = CineColors.PrimaryText,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(accent)
+                )
+                Text(
+                    text = listOf(item.year, item.kind.label).filter { it.isNotBlank() }.joinToString(" · "),
+                    color = CineColors.MutedText,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (trackedTitle.status != TrackStatus.Planned) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(CircleShape),
+                    color = accent,
+                    trackColor = CineColors.Card
                 )
             }
         }
