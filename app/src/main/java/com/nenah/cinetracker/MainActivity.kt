@@ -90,6 +90,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -228,7 +229,6 @@ fun CineTrackerApp(viewModel: CineViewModel = viewModel()) {
                 onSetEpisodeRating = viewModel::setEpisodeRating,
                 onLoadSeasonDetails = viewModel::loadSeasonDetails,
                 onRemoveFromTracker = viewModel::removeSelectedFromTracker,
-                onThemeSelected = viewModel::setTheme,
                 onRefreshQuota = viewModel::refreshApiQuota,
                 onRollRoulette = viewModel::rollRoulette,
                 onClearRoulette = viewModel::clearRoulette,
@@ -260,7 +260,6 @@ private fun CineNavHost(
     onSetEpisodeRating: (Int, Int, Int, Int?) -> Unit,
     onLoadSeasonDetails: (Int) -> Unit,
     onRemoveFromTracker: () -> Unit,
-    onThemeSelected: (CineAppTheme) -> Unit,
     onRefreshQuota: () -> Unit,
     onRollRoulette: () -> Unit,
     onClearRoulette: () -> Unit,
@@ -347,10 +346,7 @@ private fun CineNavHost(
         composable(CineTab.Profile.route) {
             ProfileScreen(
                 isTmdbConfigured = uiState.isTmdbConfigured,
-                stats = uiState.trackerStats,
-                recentEvents = uiState.recentEvents,
-                selectedTheme = uiState.appTheme,
-                onThemeSelected = onThemeSelected
+                stats = uiState.trackerStats
             )
         }
         composable(
@@ -584,6 +580,7 @@ private fun HomeSkeleton() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchScreen(
     uiState: CineUiState,
@@ -594,6 +591,31 @@ private fun SearchScreen(
     onOpenItem: (MediaItem) -> Unit
 ) {
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp
+    val manualLinkSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showManualLinkSheet by rememberSaveable { mutableStateOf(false) }
+
+    if (showManualLinkSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showManualLinkSheet = false },
+            sheetState = manualLinkSheetState,
+            containerColor = CineColors.Background,
+            contentColor = CineColors.PrimaryText
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                ManualLinkCard(
+                    link = uiState.manualLink,
+                    isLoading = uiState.isManualAddLoading,
+                    message = uiState.manualAddMessage,
+                    onLinkChanged = onManualLinkChanged,
+                    onAdd = onAddManualLink
+                )
+            }
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -602,7 +624,10 @@ private fun SearchScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item {
-            SearchHeader(onOpenAiChat = onOpenAiChat)
+            SearchHeader(
+                onOpenAiChat = onOpenAiChat,
+                onOpenManualLink = { showManualLinkSheet = true }
+            )
         }
         item {
             TextField(
@@ -629,15 +654,6 @@ private fun SearchScreen(
                     focusedPlaceholderColor = CineColors.MutedText,
                     unfocusedPlaceholderColor = CineColors.MutedText
                 )
-            )
-        }
-        item {
-            ManualLinkCard(
-                link = uiState.manualLink,
-                isLoading = uiState.isManualAddLoading,
-                message = uiState.manualAddMessage,
-                onLinkChanged = onManualLinkChanged,
-                onAdd = onAddManualLink
             )
         }
         if (uiState.isSearchLoading) {
@@ -790,14 +806,98 @@ private fun AiChatBubble(message: AiChatMessage) {
             color = if (message.isUser) CineColors.Gold else CineColors.Card,
             border = if (message.isUser) null else BorderStroke(1.dp, CineColors.Stroke)
         ) {
-            Text(
-                text = message.text,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
-                color = if (message.isUser) CineColors.OnGold else CineColors.PrimaryText,
-                style = MaterialTheme.typography.bodyMedium,
-                lineHeight = 20.sp
-            )
+            if (message.isUser) {
+                Text(
+                    text = message.text,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+                    color = CineColors.OnGold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    lineHeight = 20.sp
+                )
+            } else {
+                AiFormattedText(
+                    text = message.text,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp)
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun AiFormattedText(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    val uriHandler = LocalUriHandler.current
+    val cleanedText = remember(text) { text.cleanAiResponseText() }
+    val urlRegex = remember { Regex("""https?://[^\s)]+""") }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        cleanedText.lines().forEach { rawLine ->
+            val line = rawLine.trim()
+            if (line.isBlank()) {
+                Spacer(Modifier.height(4.dp))
+            } else {
+                val urls = urlRegex.findAll(line).map { it.value.trimEnd('.', ',') }.toList()
+                val textWithoutUrls = urls.fold(line) { current, url -> current.replace(url, "") }
+                    .replace("  ", " ")
+                    .trim()
+
+                if (textWithoutUrls.isNotBlank()) {
+                    val isTitleLine = line.matches(Regex("""^\d+\..+""")) || line.endsWith(":")
+                    Text(
+                        text = textWithoutUrls,
+                        color = if (isTitleLine) CineColors.PrimaryText else CineColors.SoftText,
+                        style = if (isTitleLine) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (isTitleLine) FontWeight.ExtraBold else FontWeight.Normal,
+                        lineHeight = 20.sp
+                    )
+                }
+
+                urls.forEach { url ->
+                    Surface(
+                        onClick = { uriHandler.openUri(url) },
+                        shape = RoundedCornerShape(14.dp),
+                        color = CineColors.Gold.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, CineColors.Gold.copy(alpha = 0.34f))
+                    ) {
+                        Text(
+                            text = url.linkLabel(),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            color = CineColors.Gold,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun String.cleanAiResponseText(): String {
+    return lines()
+        .joinToString("\n") { line ->
+            line.trim()
+                .replace("**", "")
+                .replace(Regex("""^\*\s+"""), "• ")
+                .replace(Regex("""^-\s+"""), "• ")
+                .replace("Причина:", "Почему:")
+        }
+        .trim()
+}
+
+private fun String.linkLabel(): String {
+    return when {
+        contains("kinopoisk", ignoreCase = true) -> "Открыть в Кинопоиске"
+        contains("themoviedb", ignoreCase = true) || contains("tmdb", ignoreCase = true) -> "Открыть в TMDb"
+        else -> "Открыть ссылку"
     }
 }
 
@@ -895,7 +995,10 @@ private fun AiChatInputBar(
 }
 
 @Composable
-private fun SearchHeader(onOpenAiChat: () -> Unit) {
+private fun SearchHeader(
+    onOpenAiChat: () -> Unit,
+    onOpenManualLink: () -> Unit
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -907,6 +1010,30 @@ private fun SearchHeader(onOpenAiChat: () -> Unit) {
             fontWeight = FontWeight.Bold
         )
         AiBadge(onClick = onOpenAiChat)
+        KinopoiskBadge(onClick = onOpenManualLink)
+    }
+}
+
+@Composable
+private fun KinopoiskBadge(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFFFF8A00),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "КП",
+                color = Color(0xFF111111),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
     }
 }
 
@@ -1412,10 +1539,7 @@ private fun LibraryMetricPill(
 @Composable
 private fun ProfileScreen(
     isTmdbConfigured: Boolean,
-    stats: TrackerStats,
-    recentEvents: List<TrackerEvent>,
-    selectedTheme: CineAppTheme,
-    onThemeSelected: (CineAppTheme) -> Unit
+    stats: TrackerStats
 ) {
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp
     LazyColumn(
@@ -1433,15 +1557,6 @@ private fun ProfileScreen(
         }
         item {
             ProfileProgressCard(stats = stats)
-        }
-        item {
-            ThemeSettingsCard(
-                selectedTheme = selectedTheme,
-                onThemeSelected = onThemeSelected
-            )
-        }
-        item {
-            EventTimelineCard(events = recentEvents)
         }
     }
 }
@@ -2141,7 +2256,6 @@ private fun EmptyLibraryCard(title: String, subtitle: String) {
 private fun LibraryPosterCard(trackedTitle: TrackedTitle, onClick: () -> Unit) {
     val item = trackedTitle.item
     val accent = statusColor(trackedTitle.status)
-    val progress = trackedTitle.progress.coerceIn(0f, 1f)
     val serviceRating = item.ratings.primaryScore
         .takeIf { it > 0.0 }
         ?: item.rating.takeIf { it > 0.0 }
@@ -2210,17 +2324,6 @@ private fun LibraryPosterCard(trackedTitle: TrackedTitle, onClick: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
-                )
-            }
-            if (trackedTitle.status != TrackStatus.Planned) {
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(3.dp)
-                        .clip(CircleShape),
-                    color = accent,
-                    trackColor = CineColors.Card
                 )
             }
         }
