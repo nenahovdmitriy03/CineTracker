@@ -153,7 +153,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun CineTrackerApp(viewModel: CineViewModel = viewModel()) {
+fun CineTrackerApp(viewModel: CineViewModel = viewModel()) {
     val context = LocalContext.current
     val imageLoader = remember {
         ImageLoader.Builder(context)
@@ -299,7 +299,7 @@ private fun CineNavHost(
         }
         composable(CineTab.Library.route) {
             LibraryScreen(
-                viewModel = viewModel,
+                viewModel = viewModel(),
                 onCreateCollection = onCreateCollection,
                 onOpenCollection = { id, name -> navController.navigate("collection/$id/$name") },
                 onOpenItem = onOpenItem
@@ -585,35 +585,7 @@ private fun SearchScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item {
-<<<<<<< HEAD
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Поиск",
-                    color = CineColors.PrimaryText,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                IconButton(
-                    onClick = { onGetAiRecommendations() },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(CineColors.Gold.copy(alpha = 0.15f))
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_search),
-                        contentDescription = "AI Рекомендации",
-                        tint = CineColors.Gold
-                    )
-                }
-            }
-=======
             SearchHeader()
->>>>>>> b79db489e69e0a207096aa3013e664774aa18c36
         }
         item {
             TextField(
