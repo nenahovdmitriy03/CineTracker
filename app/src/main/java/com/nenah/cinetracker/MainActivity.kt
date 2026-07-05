@@ -574,6 +574,9 @@ private fun SearchScreen(
     onOpenItem: (MediaItem) -> Unit
 ) {
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp
+    val aiRecommendations = remember(uiState.homeFeed, uiState.trackedTitles, uiState.searchResults) {
+        uiState.aiRecommendationItems()
+    }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -582,6 +585,7 @@ private fun SearchScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item {
+<<<<<<< HEAD
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -607,6 +611,9 @@ private fun SearchScreen(
                     )
                 }
             }
+=======
+            SearchHeader()
+>>>>>>> b79db489e69e0a207096aa3013e664774aa18c36
         }
         item {
             TextField(
@@ -636,6 +643,12 @@ private fun SearchScreen(
             )
         }
         item {
+            AiRecommendationCard(
+                recommendations = aiRecommendations,
+                onOpenItem = onOpenItem
+            )
+        }
+        item {
             ManualLinkCard(
                 link = uiState.manualLink,
                 isLoading = uiState.isManualAddLoading,
@@ -649,6 +662,112 @@ private fun SearchScreen(
         }
         items(uiState.searchResults) { item ->
             SearchResultCard(item = item, onClick = { onOpenItem(item) })
+        }
+    }
+}
+
+@Composable
+private fun SearchHeader() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            text = "Поиск",
+            color = CineColors.PrimaryText,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+        AiBadge()
+    }
+}
+
+@Composable
+private fun AiBadge() {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = CineColors.Gold,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(CineColors.OnGold)
+            )
+            Text(
+                text = "AI",
+                color = CineColors.OnGold,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.ExtraBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiRecommendationCard(
+    recommendations: List<MediaItem>,
+    onOpenItem: (MediaItem) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = CineColors.Card,
+        border = BorderStroke(1.dp, CineColors.Gold.copy(alpha = 0.24f))
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        text = "AI-подборка",
+                        color = CineColors.PrimaryText,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                    Text(
+                        text = "По твоему списку, оценкам и текущему каталогу",
+                        color = CineColors.MutedText,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                AiBadge()
+            }
+
+            if (recommendations.isEmpty()) {
+                Text(
+                    text = "Добавь несколько фильмов в список или дождись загрузки каталога.",
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                    color = CineColors.MutedText,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            } else {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(horizontal = 18.dp)
+                ) {
+                    items(recommendations, key = { it.mediaKey() }) { item ->
+                        PosterCard(
+                            item = item,
+                            onClick = { onOpenItem(item) }
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -4033,6 +4152,72 @@ private fun MediaItem.matches(filter: HomeFilter, allowedKeys: Set<String>): Boo
     HomeFilter.Movies -> kind == MediaKind.Movie
     HomeFilter.Anime,
     HomeFilter.New -> mediaKey() in allowedKeys
+}
+
+private fun CineUiState.aiRecommendationItems(): List<MediaItem> {
+    val feed = homeFeed
+    val feedItems = (if (feed == null) {
+        searchResults
+    } else {
+        feed.trending +
+            feed.newReleases +
+            feed.popularMovies +
+            feed.popularShows +
+            feed.anime +
+            searchResults
+    }).distinctForUi()
+
+    if (feedItems.isEmpty()) return emptyList()
+
+    val trackedKeys = trackedTitles.map { it.item.mediaKey() }.toSet()
+    val positiveTitles = trackedTitles.filter { tracked ->
+        tracked.personalRating?.let { it >= 7 } == true ||
+            tracked.status == TrackStatus.Watched ||
+            tracked.status == TrackStatus.Watching
+    }
+    val preferredKind = positiveTitles
+        .groupingBy { it.item.kind }
+        .eachCount()
+        .maxByOrNull { it.value }
+        ?.key
+    val favoriteWords = positiveTitles
+        .flatMap { tracked -> tracked.item.title.aiKeywords() + tracked.item.overview.aiKeywords() }
+        .toSet()
+    val trendingKeys = feed?.trending.orEmpty().map { it.mediaKey() }.toSet()
+    val newKeys = feed?.newReleases.orEmpty().map { it.mediaKey() }.toSet()
+
+    val freshCandidates = feedItems.filterNot { it.mediaKey() in trackedKeys }
+    val candidates = freshCandidates.ifEmpty { feedItems }
+
+    return candidates
+        .sortedByDescending { item ->
+            var score = item.ratings.primaryScore.takeIf { it > 0.0 } ?: item.rating
+            if (item.kind == preferredKind) score += 1.4
+            if (item.mediaKey() in trendingKeys) score += 0.8
+            if (item.mediaKey() in newKeys) score += 0.5
+            score += item.title.aiKeywords().intersect(favoriteWords).size * 0.35
+            if (item.mediaKey() in trackedKeys) score -= 4.0
+            score
+        }
+        .take(10)
+}
+
+private fun String.aiKeywords(): Set<String> {
+    val stopWords = setOf(
+        "фильм",
+        "сериал",
+        "сезон",
+        "история",
+        "когда",
+        "после",
+        "свой",
+        "свои",
+        "жизнь"
+    )
+    return lowercase(Locale.forLanguageTag("ru-RU"))
+        .split(Regex("[^а-яa-z0-9]+"))
+        .filter { it.length >= 4 && it !in stopWords }
+        .toSet()
 }
 
 private fun MediaItem.mediaKey(): String = "${kind.routeValue}:$id"
