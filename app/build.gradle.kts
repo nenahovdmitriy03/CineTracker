@@ -62,6 +62,7 @@ android {
         buildConfigField("String", "TMDB_IMAGE_BASE_URL", "\"${tmdbImageBaseUrl.escapeBuildConfigString()}\"")
         buildConfigField("String", "POISKKINO_API_KEY", "\"${poiskKinoApiKey.escapeBuildConfigString()}\"")
         buildConfigField("String", "POISKKINO_API_BASE_URL", "\"${poiskKinoApiBaseUrl.escapeBuildConfigString()}\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"AQ.Ab8RN6LrD_sUtbSwfmRBIRXLJMOQYq_EdMStX161mHld6o73uw\"")
     }
 
     buildTypes {
@@ -105,6 +106,7 @@ dependencies {
     implementation(libs.androidx.palette)
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
+    implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

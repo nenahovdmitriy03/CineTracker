@@ -213,6 +213,7 @@ private fun CineTrackerApp(viewModel: CineViewModel = viewModel()) {
                 onSearchQueryChanged = viewModel::updateSearchQuery,
                 onManualLinkChanged = viewModel::updateManualLink,
                 onAddManualLink = viewModel::addManualLinkToPlan,
+                onGetAiRecommendations = viewModel::getAiRecommendations,
                 onOpenDetail = viewModel::openDetail,
                 onRefreshHome = viewModel::refreshHome,
                 onSetStatus = viewModel::setSelectedStatus,
@@ -243,6 +244,7 @@ private fun CineNavHost(
     onSearchQueryChanged: (String) -> Unit,
     onManualLinkChanged: (String) -> Unit,
     onAddManualLink: () -> Unit,
+    onGetAiRecommendations: () -> Unit,
     onOpenDetail: (MediaKind, Int) -> Unit,
     onRefreshHome: () -> Unit,
     onSetStatus: (TrackStatus) -> Unit,
@@ -291,6 +293,7 @@ private fun CineNavHost(
                 onQueryChanged = onSearchQueryChanged,
                 onManualLinkChanged = onManualLinkChanged,
                 onAddManualLink = onAddManualLink,
+                onGetAiRecommendations = onGetAiRecommendations,
                 onOpenItem = onOpenItem
             )
         }
@@ -568,6 +571,7 @@ private fun SearchScreen(
     onQueryChanged: (String) -> Unit,
     onManualLinkChanged: (String) -> Unit,
     onAddManualLink: () -> Unit,
+    onGetAiRecommendations: () -> Unit,
     onOpenItem: (MediaItem) -> Unit
 ) {
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 20.dp
@@ -579,12 +583,31 @@ private fun SearchScreen(
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         item {
-            Text(
-                text = "Поиск",
-                color = CineColors.PrimaryText,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Поиск",
+                    color = CineColors.PrimaryText,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(
+                    onClick = { onGetAiRecommendations() },
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(CineColors.Gold.copy(alpha = 0.15f))
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_search),
+                        contentDescription = "AI Рекомендации",
+                        tint = CineColors.Gold
+                    )
+                }
+            }
         }
         item {
             TextField(

@@ -20,10 +20,7 @@ import com.nenah.cinetracker.model.TrackerEvent
 import com.nenah.cinetracker.model.TrackerStats
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class CineUiState(
@@ -50,7 +47,8 @@ data class CineUiState(
     val manualAddMessage: String? = null,
     val rouletteResult: MediaItem? = null,
     val isRouletteLoading: Boolean = false,
-    val currentCollectionItems: List<MediaItem> = emptyList()
+    val currentCollectionItems: List<MediaItem> = emptyList(),
+    val libraryStatusFilter: TrackStatus? = null
 )
 
 class CineViewModel(
@@ -66,6 +64,14 @@ class CineViewModel(
         )
     )
     val uiState: StateFlow<CineUiState> = _uiState.asStateFlow()
+
+    val filteredLibraryTitles = combine(
+        _uiState.map { it.trackedTitles },
+        _uiState.map { it.libraryStatusFilter }
+    ) { titles, status ->
+        titles.filter { status == null || it.status == status }
+              .sortedByDescending { it.updatedAt }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private var searchJob: Job? = null
     private var detailTrackingJob: Job? = null
@@ -256,9 +262,6 @@ class CineViewModel(
     fun setSelectedRating(rating: Int) {
         val item = _uiState.value.selectedDetail?.item ?: return
         viewModelScope.launch {
-            if (_uiState.value.selectedTrackedTitle == null) {
-                trackingRepository.setStatus(item, TrackStatus.Planned)
-            }
             trackingRepository.setRating(item, rating)
         }
     }
@@ -373,8 +376,38 @@ class CineViewModel(
         }
     }
 
+    fun getAiRecommendations() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSearchLoading = true) }
+            val model = com.google.ai.client.generativeai.GenerativeModel(
+                modelName = "gemini-1.5-flash",
+                apiKey = com.nenah.cinetracker.BuildConfig.GEMINI_API_KEY
+            )
+            
+            val ratedTitles = _uiState.value.trackedTitles.filter { it.personalRating != null }
+            val history = ratedTitles.joinToString("\n") { 
+                "- ${it.item.title} (${it.item.year}), моя оценка: ${it.personalRating}/10" 
+            }
+            
+            val prompt = "Я посмотрел следующие фильмы/сериалы: \n$history\n. " +
+                         "На основе этих предпочтений посоветуй 5 фильмов, которые мне стоит посмотреть. " +
+                         "Ответь списком, где указано название, год и короткая причина."
+
+            try {
+                val response = model.generateContent(prompt)
+                _uiState.update { it.copy(manualAddMessage = response.text, isSearchLoading = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(manualAddMessage = "Ошибка ИИ: ${e.message}", isSearchLoading = false) }
+            }
+        }
+    }
+
     fun clearRoulette() {
         _uiState.update { it.copy(rouletteResult = null) }
+    }
+
+    fun setLibraryStatus(status: TrackStatus?) {
+        _uiState.update { it.copy(libraryStatusFilter = status) }
     }
 }
 
