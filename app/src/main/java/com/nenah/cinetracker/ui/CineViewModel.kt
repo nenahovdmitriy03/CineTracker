@@ -28,6 +28,7 @@ private const val AiChatModelName = "gemini-2.5-flash"
 data class AiChatMessage(
     val text: String,
     val isUser: Boolean,
+    val recommendations: List<MediaItem> = emptyList(),
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -429,6 +430,7 @@ class CineViewModel(
                 )
                 val response = model.generateContent(buildAiChatPrompt(userText))
                 val answer = response.text?.trim()
+                val recommendations = resolveAiRecommendations(answer.orEmpty())
                 _uiState.update {
                     it.copy(
                         aiChatMessages = it.aiChatMessages + AiChatMessage(
@@ -437,7 +439,8 @@ class CineViewModel(
                             } else {
                                 answer
                             },
-                            isUser = false
+                            isUser = false,
+                            recommendations = recommendations
                         ),
                         isAiChatLoading = false,
                         aiChatError = null
@@ -490,6 +493,9 @@ class CineViewModel(
             Формат ответа:
             - Пиши коротко, без длинного вступления.
             - Не используй Markdown-символы **, *, #.
+            - Давай 3-5 рекомендаций. Каждый пункт начинай строго с номера: 1. Название (год) — фильм/сериал
+            - После каждого названия обязательно пиши строку "Почему:".
+            - Если знаешь рейтинг, можно добавить "Рейтинг:", но не выдумывай его.
             - Для рекомендаций используй формат:
               1. Название (год) — фильм/сериал
               Почему: одна короткая причина.
@@ -514,6 +520,79 @@ class CineViewModel(
             Новый вопрос пользователя:
             $userText
         """.trimIndent()
+    }
+
+    private data class AiRecommendationQuery(
+        val title: String,
+        val year: String?
+    )
+
+    private suspend fun resolveAiRecommendations(answer: String): List<MediaItem> {
+        val queries = extractAiRecommendationQueries(answer)
+        if (queries.isEmpty()) return emptyList()
+
+        val resolved = mutableListOf<MediaItem>()
+        val seenKeys = mutableSetOf<String>()
+
+        for (query in queries) {
+            val searchQuery = listOfNotNull(query.title, query.year).joinToString(" ")
+            val item = bestAiRecommendationMatch(repository.search(searchQuery), query) ?: continue
+            val key = "${item.kind.routeValue}:${item.id}"
+            if (seenKeys.add(key)) {
+                resolved += item
+            }
+            if (resolved.size >= 8) break
+        }
+
+        return resolved
+    }
+
+    private fun extractAiRecommendationQueries(answer: String): List<AiRecommendationQuery> {
+        val numberedLine = Regex("""^\s*\d+\.\s+(.+?)(?:\s+\((\d{4})\))?(?:\s+[—-].*)?$""")
+        return answer.lines()
+            .mapNotNull { rawLine ->
+                val line = rawLine.replace("**", "").trim()
+                val match = numberedLine.find(line) ?: return@mapNotNull null
+                val title = match.groupValues[1]
+                    .substringBefore(" — ")
+                    .substringBefore(" - ")
+                    .trim()
+                    .trim('"', '«', '»')
+                if (title.length < 2) return@mapNotNull null
+                AiRecommendationQuery(
+                    title = title,
+                    year = match.groupValues.getOrNull(2)?.takeIf { it.isNotBlank() }
+                )
+            }
+            .distinctBy { "${it.title.lowercase()}-${it.year.orEmpty()}" }
+            .take(8)
+    }
+
+    private fun bestAiRecommendationMatch(
+        results: List<MediaItem>,
+        query: AiRecommendationQuery
+    ): MediaItem? {
+        if (results.isEmpty()) return null
+        val normalizedQueryTitle = query.title.normalizedAiTitle()
+        return results.firstOrNull { item ->
+            query.year != null &&
+                item.year == query.year &&
+                item.title.normalizedAiTitle().let { title ->
+                    title.contains(normalizedQueryTitle) || normalizedQueryTitle.contains(title)
+                }
+        } ?: results.firstOrNull { item ->
+            item.title.normalizedAiTitle().let { title ->
+                title.contains(normalizedQueryTitle) || normalizedQueryTitle.contains(title)
+            }
+        } ?: results.firstOrNull { item ->
+            query.year != null && item.year == query.year
+        } ?: results.firstOrNull()
+    }
+
+    private fun String.normalizedAiTitle(): String {
+        return lowercase()
+            .replace(Regex("""[^\p{L}\p{Nd}]+"""), " ")
+            .trim()
     }
 
     private fun aiChatErrorMessage(error: Throwable): String {

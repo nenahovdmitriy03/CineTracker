@@ -313,7 +313,8 @@ private fun CineNavHost(
                 uiState = uiState,
                 onBack = onBack,
                 onInputChanged = onAiChatInputChanged,
-                onSend = onSendAiChatMessage
+                onSend = onSendAiChatMessage,
+                onOpenItem = onOpenItem
             )
         }
         composable(CineTab.Library.route) {
@@ -670,7 +671,8 @@ private fun AiChatScreen(
     uiState: CineUiState,
     onBack: () -> Unit,
     onInputChanged: (String) -> Unit,
-    onSend: () -> Unit
+    onSend: () -> Unit,
+    onOpenItem: (MediaItem) -> Unit
 ) {
     val topPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 14.dp
     Column(
@@ -721,7 +723,10 @@ private fun AiChatScreen(
                 }
             }
             items(uiState.aiChatMessages) { message ->
-                AiChatBubble(message = message)
+                AiChatBubble(
+                    message = message,
+                    onOpenItem = onOpenItem
+                )
             }
             if (uiState.isAiChatLoading) {
                 item {
@@ -790,7 +795,10 @@ private fun AiChatEmptyState(onSuggestionClick: (String) -> Unit) {
 }
 
 @Composable
-private fun AiChatBubble(message: AiChatMessage) {
+private fun AiChatBubble(
+    message: AiChatMessage,
+    onOpenItem: (MediaItem) -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start
@@ -815,12 +823,95 @@ private fun AiChatBubble(message: AiChatMessage) {
                     lineHeight = 20.sp
                 )
             } else {
-                AiFormattedText(
-                    text = message.text,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    AiFormattedText(
+                        text = message.text,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp)
+                    )
+                    if (message.recommendations.isNotEmpty()) {
+                        AiRecommendationPosterRow(
+                            recommendations = message.recommendations,
+                            onOpenItem = onOpenItem
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiRecommendationPosterRow(
+    recommendations: List<MediaItem>,
+    onOpenItem: (MediaItem) -> Unit
+) {
+    LazyRow(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(recommendations, key = { it.mediaKey() }) { item ->
+            AiRecommendationPosterCard(
+                item = item,
+                onClick = { onOpenItem(item) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiRecommendationPosterCard(
+    item: MediaItem,
+    onClick: () -> Unit
+) {
+    val rating = item.ratings.primaryScore.takeIf { it > 0.0 } ?: item.rating.takeIf { it > 0.0 }
+    Column(
+        modifier = Modifier
+            .width(104.dp)
+            .clickable(onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        Box {
+            PosterArt(
+                item = item,
+                modifier = Modifier
+                    .width(104.dp)
+                    .height(156.dp),
+                imageWidthPx = 208,
+                imageHeightPx = 312
+            )
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(7.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = CineColors.Background.copy(alpha = 0.82f),
+                border = BorderStroke(1.dp, CineColors.Gold.copy(alpha = 0.28f))
+            ) {
+                Text(
+                    text = rating.formatRating(),
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
+                    color = CineColors.Gold,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1
                 )
             }
         }
+        Text(
+            text = item.title,
+            color = CineColors.PrimaryText,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = listOf(item.year, item.kind.label).filter { it.isNotBlank() }.joinToString(" · "),
+            color = CineColors.MutedText,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
