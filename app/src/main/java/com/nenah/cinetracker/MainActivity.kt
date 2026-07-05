@@ -1164,6 +1164,10 @@ private fun LibraryScreen(
         item {
             LibraryStatusFilterRow(
                 selectedStatus = selectedStatus,
+                totalCount = trackedTitles.size,
+                watchingCount = watchingCount,
+                plannedCount = plannedCount,
+                watchedCount = watchedCount,
                 onStatusSelected = { viewModel.setLibraryStatus(it) }
             )
         }
@@ -1184,7 +1188,7 @@ private fun LibraryScreen(
             key = { it.item.mediaKey() },
             contentType = { it.status.routeValue }
         ) { trackedTitle ->
-            LibraryTitleCard(
+            LibraryTitleCardRedesigned(
                 trackedTitle = trackedTitle,
                 onClick = { onOpenItem(trackedTitle.item) }
             )
@@ -1202,53 +1206,69 @@ private fun LibraryHeaderCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(28.dp),
         color = CineColors.Card,
-        border = BorderStroke(1.dp, CineColors.Stroke)
+        border = BorderStroke(1.dp, CineColors.Gold.copy(alpha = 0.22f))
     ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            CineColors.Gold.copy(alpha = 0.18f),
+                            CineColors.Card,
+                            CineColors.Mint.copy(alpha = 0.08f)
+                        )
+                    )
+                )
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Моя библиотека",
-                        color = CineColors.PrimaryText,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                    Text(
-                        text = "$total тайтлов · $rated оценок",
-                        color = CineColors.MutedText,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(CineColors.Gold.copy(alpha = 0.14f))
-                        .border(1.dp, CineColors.Gold.copy(alpha = 0.35f), RoundedCornerShape(16.dp)),
-                    contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_bookmark),
-                        contentDescription = null,
-                        tint = CineColors.Gold,
-                        modifier = Modifier.size(24.dp)
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Мой список",
+                            color = CineColors.PrimaryText,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "$total тайтлов · $rated оценок",
+                            color = CineColors.SoftText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(58.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(CineColors.Background.copy(alpha = 0.46f))
+                            .border(1.dp, CineColors.Gold.copy(alpha = 0.32f), RoundedCornerShape(18.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_bookmark),
+                            contentDescription = null,
+                            tint = CineColors.Gold,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
                 }
-            }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                LibraryMetricPill("Смотрю", watching.toString(), CineColors.Mint, Modifier.weight(1f))
-                LibraryMetricPill("В плане", planned.toString(), CineColors.Gold, Modifier.weight(1f))
-                LibraryMetricPill("Готово", watched.toString(), CineColors.Coral, Modifier.weight(1f))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LibraryMetricPill("Смотрю", watching.toString(), CineColors.Mint, Modifier.weight(1f))
+                    LibraryMetricPill("План", planned.toString(), CineColors.Gold, Modifier.weight(1f))
+                    LibraryMetricPill("Готово", watched.toString(), CineColors.Coral, Modifier.weight(1f))
+                }
             }
         }
     }
@@ -1262,23 +1282,35 @@ private fun LibraryMetricPill(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.height(70.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = color.copy(alpha = 0.1f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.25f))
+        modifier = modifier.height(76.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = CineColors.Background.copy(alpha = 0.52f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.34f))
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = value,
-                color = color,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.ExtraBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = value,
+                    color = color,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(color)
+                )
+            }
             Text(
                 text = label,
                 color = CineColors.MutedText,
@@ -1820,14 +1852,24 @@ private fun LibraryKindFilterRow(
 @Composable
 private fun LibraryStatusFilterRow(
     selectedStatus: TrackStatus?,
+    totalCount: Int,
+    watchingCount: Int,
+    plannedCount: Int,
+    watchedCount: Int,
     onStatusSelected: (TrackStatus?) -> Unit
 ) {
     val filters: List<TrackStatus?> = listOf(null) + TrackStatus.entries
     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         items(filters) { status ->
             val selected = selectedStatus == status
+            val count = when (status) {
+                TrackStatus.Watching -> watchingCount
+                TrackStatus.Planned -> plannedCount
+                TrackStatus.Watched -> watchedCount
+                null -> totalCount
+            }
             LibraryFilterChip(
-                text = status?.title ?: "Все статусы",
+                text = "${status?.title ?: "Все"} $count",
                 selected = selected,
                 onClick = { onStatusSelected(status) }
             )
@@ -1839,16 +1881,16 @@ private fun LibraryStatusFilterRow(
 private fun LibraryFilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
     Surface(
         modifier = Modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(50),
-        color = if (selected) CineColors.Gold else CineColors.Card,
-        border = BorderStroke(1.dp, if (selected) CineColors.Gold else CineColors.Stroke)
+        shape = RoundedCornerShape(18.dp),
+        color = if (selected) CineColors.Gold else CineColors.Card.copy(alpha = 0.86f),
+        border = BorderStroke(1.dp, if (selected) CineColors.Gold else CineColors.Stroke.copy(alpha = 0.82f))
     ) {
         Text(
             text = text,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 10.dp),
             color = if (selected) CineColors.OnGold else CineColors.SoftText,
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.ExtraBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -2001,6 +2043,169 @@ private fun EmptyLibraryCard(title: String, subtitle: String) {
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun LibraryTitleCardRedesigned(trackedTitle: TrackedTitle, onClick: () -> Unit) {
+    val item = trackedTitle.item
+    val statusAccent = statusColor(trackedTitle.status)
+    val progressPercent = (trackedTitle.progress.coerceIn(0f, 1f) * 100).toInt()
+    val serviceRating = item.ratings.primaryScore
+        .takeIf { it > 0.0 }
+        ?: item.rating.takeIf { it > 0.0 }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(174.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        color = CineColors.Card,
+        border = BorderStroke(1.dp, statusAccent.copy(alpha = 0.26f))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            statusAccent.copy(alpha = 0.12f),
+                            CineColors.Card,
+                            CineColors.Card
+                        )
+                    )
+                )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(5.dp)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(statusAccent)
+                )
+                PosterArt(
+                    item = item,
+                    modifier = Modifier
+                        .width(92.dp)
+                        .fillMaxHeight(),
+                    imageWidthPx = 184,
+                    imageHeightPx = 276
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        StatusBadge(trackedTitle.status)
+                        Text(
+                            text = listOf(item.year, item.kind.label).filter { it.isNotBlank() }.joinToString(" · "),
+                            color = CineColors.MutedText,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Text(
+                        text = item.title,
+                        color = CineColors.PrimaryText,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = item.overview.ifBlank { "Описание пока не загружено." },
+                        color = CineColors.SoftText,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        LibraryInfoPill(
+                            label = item.ratings.primarySource ?: "Рейтинг",
+                            value = serviceRating.formatRating(),
+                            color = CineColors.Gold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        LibraryInfoPill(
+                            label = "Моя",
+                            value = trackedTitle.personalRating?.toString() ?: "—",
+                            color = trackedTitle.personalRating?.let(::ratingColor) ?: CineColors.MutedText,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = if (trackedTitle.status == TrackStatus.Planned) "В плане" else "$progressPercent%",
+                            color = statusAccent,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { if (trackedTitle.status == TrackStatus.Planned) 0f else trackedTitle.progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(5.dp)
+                            .clip(CircleShape),
+                        color = statusAccent,
+                        trackColor = CineColors.Background.copy(alpha = 0.72f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryInfoPill(
+    label: String,
+    value: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.height(34.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = CineColors.Background.copy(alpha = 0.54f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.24f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = value,
+                color = color,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = label,
+                color = CineColors.MutedText,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
